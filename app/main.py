@@ -32,8 +32,6 @@ async def lifespan(app: FastAPI):
     # Get the database connection
     await db_handler.get_database()
 
-    # TODO: Run an otp cleanup task every 24 hours
-
     yield
 
 
