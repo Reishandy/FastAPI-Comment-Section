@@ -19,8 +19,7 @@ class Registration(User):
                           max_length=20)
 
 
-class Verification(BaseModel):
-    email: str = Field(..., description="The email of the user", examples=["john.doe@acme.com"])
+class Verification(User):
     verification_code: str = Field(..., description="The verification code", examples=["123456"], min_length=6,
                                    max_length=6)
 
@@ -38,7 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# Custom exception handler to change {detail} to {message}
+# Custom exception handler to change {detail} to {message} for more unified response
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(

@@ -5,7 +5,7 @@ from urllib.parse import quote_plus
 from secrets import choice
 
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorClient, AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 from requests import post
 
@@ -57,9 +57,10 @@ async def email_verification_queue(email: str, username: str = None) -> None:
         raise ValueError("Invalid email")
 
     try:
-        # Generate a random numerical verification code
         verification_code = generate_numerical_verification_code()
 
+        # This check determines if the user is registering or logging in by checking if the username is provided,
+        # since the username is only used in the registration endpoint.
         if username:
             # From Register Endpoint
             # Check if the user already exists
@@ -67,7 +68,6 @@ async def email_verification_queue(email: str, username: str = None) -> None:
             if existing_user:
                 raise ValueError("User already exists")
 
-            # Replace the user if already exists
             await DB.verification_queue.replace_one(
                 {"email": email},
                 {"email": email, "username": username, "verification_code": verification_code, "timestamp": datetime.now()},
@@ -75,10 +75,10 @@ async def email_verification_queue(email: str, username: str = None) -> None:
             )
         else:
             # From Login Endpoint
-            # Check if the user exists
+            # Check if the user is registered
             existing_user = await DB.users.find_one({"email": email})
             if not existing_user:
-                raise ValueError("404")
+                raise ValueError("404") # User not found
 
             await DB.verification_queue.replace_one(
                 {"email": email},
@@ -101,7 +101,7 @@ async def verify_email(email: str, verification_code: str) -> str:
     :return: An access token if the verification is successful.
     """
     try:
-        # Get the user from the verification queue
+        # Verification process
         user = await DB.verification_queue.find_one({"email": email})
         if not user:
             raise ValueError("404")
@@ -109,18 +109,17 @@ async def verify_email(email: str, verification_code: str) -> str:
         stored_verification_code = user["verification_code"]
         timestamp = user["timestamp"]
 
-        # Check if the verification code is correct
+        # Perform verification
         if verification_code != stored_verification_code:
             raise ValueError("Invalid verification code")
-
-        # Check if the verification code is expired
         if (datetime.now() - timestamp).total_seconds() > 600: # 10 minutes
             raise ValueError("Verification code expired")
 
-        # Generate an access token
+
+        # Logging in and/or registering process
         access_token = generate_access_token() + "_" + email
 
-        # Check if the user already registered
+        # Check if the user is registering or logging in by checking if the user is registered in the users collection
         existing_user = await DB.users.find_one({"email": email})
         if existing_user:
             # From Login Queue
@@ -129,10 +128,10 @@ async def verify_email(email: str, verification_code: str) -> str:
             await DB.users.update_one({"email": email}, {"$push": {"access_tokens": {"token": access_token, "timestamp": datetime.now()}}})
         else:
             # From Register Queue
-            # If the user is not registered, insert the user into the users collection
+            # If the user is not registered, insert the user into the users collection while adding the access token
             await DB.users.insert_one({"email": email, "username": user["username"], "access_tokens": [{"token": access_token, "timestamp": datetime.now()}]})
 
-        # Delete the user from the verification queue
+        # Delete the user from the verification queue to prevent bug in the queue
         await DB.verification_queue.delete_one({"email": email})
 
         return access_token
@@ -165,12 +164,13 @@ def generate_numerical_verification_code(length: int = 6) -> str:
 
 def send_verification_email(email: str, verification_code: str) -> None:
     """
-    Send a verification email using own custom email service.
+    Function to send a verification email to the user.
+    INFO: This function should be modified to use your own email service.
 
     :param email: The email to send the verification email to.
     :param verification_code: The verification code to include in the email.
     """
-    # INFO: This is an internal service, so the URL is hardcoded
+    # INFO: This is my own internal service, so the URL is hardcoded
     url = "http://192.168.1.99:29998/email"
     data = {
         "recipient": email,
@@ -179,9 +179,8 @@ def send_verification_email(email: str, verification_code: str) -> None:
         "html": "<table width=\"100%\" style=\"max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);\"> <tr> <td align=\"center\"> <h2 style=\"color: #007bff;\">Rei\'s Comment Section</h2> <p style=\"font-size: 16px; color: #555;\">Your verification code is:</p> <p style=\"font-size: 24px; font-weight: bold; color: #007bff; background: #f0f8ff; padding: 10px 20px; border-radius: 5px; display: inline-block;\"> " + verification_code + " </p> <p>This code will expire in 10 minutes.</p> <p style=\"color: #777;\">If you didn\'t request this code, please ignore this email.</p> </td> </tr> <tr> <td align=\"center\" style=\"padding-top: 20px; border-top: 1px solid #ddd;\"> <p style=\"font-size: 12px; color: #777;\"> Need help? Contact me at <a href=\"mailto:akbar@reishandy.my.id\" style=\"color: #007bff; text-decoration: none;\">akbar@reishandy.my.id</a> </p> <p style=\"font-size: 12px; color: #888;\"> <em>Legal Disclaimer:</em> This email may contain confidential information. If you are not the intended recipient, please delete it immediately. </p> </td> </tr></table>"
     }
 
-    # Send the data using a requests POST request
+    # Send the data using a requests's POST
     response = post(url, json=data)
-
     if response.status_code != 201:
         raise RuntimeError("Failed to send verification email")
 
@@ -189,6 +188,7 @@ def send_verification_email(email: str, verification_code: str) -> None:
 def generate_access_token() -> str:
     """
     Generate a random access token.
+    INFO: This is not a secure token, but it is enough for this project.
 
     :return: A random access token as a string.
     """
