@@ -1,4 +1,5 @@
-from datetime import datetime
+from asyncio import sleep
+from datetime import datetime, timedelta
 from re import match
 from os import getenv
 from urllib.parse import quote_plus
@@ -14,6 +15,7 @@ load_dotenv()
 
 # Global database variable
 DB: AsyncIOMotorDatabase
+EXPIRATION_DAYS = 30
 
 
 # === DATABASE ===
@@ -45,6 +47,26 @@ async def get_database() -> None:
     DB = client[database]
 
 
+async def remove_expired_tokens():
+    global EXPIRATION_DAYS
+
+    while True:
+        print(f"INF0:     {datetime.now()} - Running token cleanup")
+
+        # Calculate the expiration threshold
+        expiration_threshold = datetime.now() - timedelta(days=EXPIRATION_DAYS)
+
+        # Remove expired tokens from the database
+        await DB.users.update_many(
+            {},
+            {"$pull": {"access_tokens": {"timestamp": {"$lt": expiration_threshold}}}}
+        )
+
+        # Sleep for a day before running the cleanup again
+        await sleep(86400)  # 86400 seconds = 1 day
+
+
+
 # === MAIN FLOW ===
 async def email_verification_queue(email: str, username: str = None) -> None:
     """
@@ -56,9 +78,9 @@ async def email_verification_queue(email: str, username: str = None) -> None:
     if not is_email_valid(email):
         raise ValueError("Invalid email")
 
-    try:
-        verification_code = generate_numerical_verification_code()
+    verification_code = generate_numerical_verification_code()
 
+    try:
         # This check determines if the user is registering or logging in by checking if the username is provided,
         # since the username is only used in the registration endpoint.
         if username:
@@ -70,7 +92,8 @@ async def email_verification_queue(email: str, username: str = None) -> None:
 
             await DB.verification_queue.replace_one(
                 {"email": email},
-                {"email": email, "username": username, "verification_code": verification_code, "timestamp": datetime.now()},
+                {"email": email, "username": username, "verification_code": verification_code,
+                 "timestamp": datetime.now()},
                 upsert=True
             )
         else:
@@ -78,7 +101,7 @@ async def email_verification_queue(email: str, username: str = None) -> None:
             # Check if the user is registered
             existing_user = await DB.users.find_one({"email": email})
             if not existing_user:
-                raise ValueError("404") # User not found
+                raise ValueError("404")  # User not found
 
             await DB.verification_queue.replace_one(
                 {"email": email},
@@ -112,9 +135,8 @@ async def verify_email(email: str, verification_code: str) -> str:
         # Perform verification
         if verification_code != stored_verification_code:
             raise ValueError("Invalid verification code")
-        if (datetime.now() - timestamp).total_seconds() > 600: # 10 minutes
+        if (datetime.now() - timestamp).total_seconds() > 600:  # 10 minutes
             raise ValueError("Verification code expired")
-
 
         # Logging in and/or registering process
         access_token = generate_access_token() + "_" + email
@@ -125,16 +147,118 @@ async def verify_email(email: str, verification_code: str) -> str:
             # From Login Queue
             # If the user is already registered, add the access token to the user's access_token list
             # Why using list? Because this will allow the user to log in from multiple devices.
-            await DB.users.update_one({"email": email}, {"$push": {"access_tokens": {"token": access_token, "timestamp": datetime.now()}}})
+            await DB.users.update_one({"email": email}, {
+                "$push": {"access_tokens": {"token": access_token, "timestamp": datetime.now()}}})
         else:
             # From Register Queue
             # If the user is not registered, insert the user into the users collection while adding the access token
-            await DB.users.insert_one({"email": email, "username": user["username"], "access_tokens": [{"token": access_token, "timestamp": datetime.now()}]})
+            await DB.users.insert_one({"email": email, "username": user["username"],
+                                       "access_tokens": [{"token": access_token, "timestamp": datetime.now()}]})
 
         # Delete the user from the verification queue to prevent bug in the queue
         await DB.verification_queue.delete_one({"email": email})
 
         return access_token
+    except OperationFailure as e:
+        raise RuntimeError(str(e))
+
+
+async def validate_access_token(access_token: str) -> dict[str, str]:
+    """
+    Validate the access token by checking if the access token is in the user's access_token list.
+
+    :param access_token: The access token to validate.
+    :return: A dictionary containing the email and username of the user.
+    """
+    global EXPIRATION_DAYS
+
+    if not access_token or not is_access_token_valid(access_token):
+        raise ValueError("Invalid access token")
+
+    # Split the access token to get the email
+    email = access_token.split("_")[1]
+
+    try:
+        # Check if the access token is valid and get the token info
+        user = await DB.users.find_one({"email": email, "access_tokens.token": access_token},
+                                       {"access_tokens.$": 1, "email": 1, "username": 1})
+        if not user or not user.get("access_tokens"):
+            raise ValueError("Invalid access token")
+
+        token_info = user["access_tokens"][0]
+
+        # Check if the access token is expired (30 days from last usage)
+        expiration_threshold = datetime.now() - timedelta(days=EXPIRATION_DAYS)
+        if token_info["timestamp"] < expiration_threshold:
+            raise ValueError("Access token expired")
+
+        # Update the timestamp of the access token
+        await DB.users.update_one({"email": email, "access_tokens.token": access_token},
+                                  {"$set": {"access_tokens.$.timestamp": datetime.now()}}, upsert=True)
+
+        return {"email": user["email"], "username": user["username"]}
+    except OperationFailure as e:
+        raise RuntimeError(str(e))
+
+
+async def post_comment(email: str, username: str, location: str, comment: str) -> None:
+    """
+    Post a comment to the database.
+
+    :param email: The email of the user.
+    :param username: The username of the user.
+    :param location: The location of the user.
+    :param comment: The comment to post.
+    """
+    try:
+        # Retrieve the current highest comment ID for the location
+        location_data = await DB.comments.find_one({"location": location}, {"max_comment_id": 1})
+        if location_data and "max_comment_id" in location_data:
+            max_id = location_data["max_comment_id"]
+        else:
+            max_id = 0
+
+        comment_data = {
+            "id": max_id + 1,
+            "email": email,
+            "username": username,
+            "comment": comment,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M:%S")
+        }
+
+        # Update the location document with the new comment and increment the max_comment_id
+        await DB.comments.update_one(
+            {"location": location},
+            {
+                "$push": {"comments": comment_data},
+                "$set": {"max_comment_id": max_id + 1}
+            },
+            upsert=True
+        )
+    except OperationFailure as e:
+        raise RuntimeError(str(e))
+
+
+async def get_comments(location: str, from_id: int, to_id: int) -> list[dict]:
+    """
+    Get the comments for a location with a range of IDs.
+
+    :param location: The location to get the comments from.
+    :param from_id: The starting ID of the range.
+    :param to_id: The ending ID of the range.
+    :return: A list of comments.
+    """
+    try:
+        pipeline = [
+            {"$match": {"location": location}},
+            {"$unwind": "$comments"},
+            {"$match": {"comments.id": {"$gte": from_id, "$lte": to_id}}},
+            {"$replaceRoot": {"newRoot": "$comments"}}
+        ]
+        cursor = DB.comments.aggregate(pipeline)
+        comments = await cursor.to_list(length=None)
+        return comments
     except OperationFailure as e:
         raise RuntimeError(str(e))
 
@@ -193,3 +317,15 @@ def generate_access_token() -> str:
     :return: A random access token as a string.
     """
     return ''.join(choice("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(64))
+
+
+def is_access_token_valid(access_token: str) -> bool:
+    """
+    Check if the access token is valid.
+
+    :param access_token: The access token to check.
+    :return: True if the access token is valid, False otherwise.
+    """
+    if bool(match(r'^[a-zA-Z0-9]{64}_[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', access_token)):
+        return True
+    return False
