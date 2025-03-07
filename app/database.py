@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 from requests import post
+from starlette.websockets import WebSocket
 
 # Load the environment variables
 load_dotenv()
@@ -34,7 +35,7 @@ async def get_database() -> None:
     - MONGODB_HOST: The host of the MongoDB database.
     - MONGODB_PORT: The port of the MongoDB database.
     """
-    global DB, ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES
+    global DB, ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES, CLEANUP_INTERVAL_SECONDS
 
     # Create connection string from environment variables
     username = quote_plus(getenv("MONGODB_USERNAME"))
@@ -54,8 +55,6 @@ async def clean_database() -> None:
     """
     Clean the database by removing expired access tokens and verification codes.
     """
-    global ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES, CLEANUP_INTERVAL_SECONDS
-
     # Get expiration from environment variables
     ACCESS_TOKEN_EXPIRATION_DAYS = int(getenv("ACCESS_TOKEN_EXPIRATION_DAYS"))
     VERIFICATION_CODE_EXPIRATION_MINUTES = int(getenv("VERIFICATION_CODE_EXPIRATION_MINUTES"))
@@ -123,8 +122,6 @@ async def verify_email(email: str, verification_code: str) -> str:
     :param verification_code: The verification code.
     :return: An access token if the verification is successful.
     """
-    global VERIFICATION_CODE_EXPIRATION_MINUTES
-
     try:
         # Verification process
         user = await DB.verification_queue.find_one({"email": email})
@@ -172,8 +169,6 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
     :param access_token: The access token to validate.
     :return: A dictionary containing the email, username, color, and initial of the user.
     """
-    global ACCESS_TOKEN_EXPIRATION_DAYS
-
     if not access_token or not is_access_token_valid(access_token):
         raise ValueError("Invalid access token")
 
@@ -184,7 +179,7 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
     try:
         # Check if the access token is valid and get the token info
         user = await DB.users.find_one({"email": email, "access_tokens.token": access_token},
-                                       {"access_tokens.$": 1, "email": 1, "username": 1})
+                                       {"access_tokens.$": 1, "email": 1, "username": 1, "color": 1, "initial": 1})
         if not user or not user.get("access_tokens"):
             raise ValueError("Invalid access token")
 
@@ -215,17 +210,19 @@ async def change_username(email: str, new_username: str) -> None:
         raise ValueError("Invalid username")
 
     try:
-        await DB.users.update_one({"email": email}, {"$set": {"username": new_username}})
+        await DB.users.update_one({"email": email}, {"$set": {"username": new_username, "initial": make_initials(new_username)}})
     except OperationFailure as e:
         raise RuntimeError(str(e))
 
 
-async def post_comment(email: str, username: str, location: str, comment: str) -> None:
+async def post_comment(email: str, username: str, color: str, initial: str, location: str, comment: str) -> None:
     """
     Post a comment to the database.
 
     :param email: The email of the user.
     :param username: The username of the user.
+    :param color: The color of the user.
+    :param initial: The initial of the user.
     :param location: The location of the user.
     :param comment: The comment to post.
     """
@@ -241,6 +238,8 @@ async def post_comment(email: str, username: str, location: str, comment: str) -
             "id": max_id + 1,
             "email": email,
             "username": username,
+            "color": color,
+            "initial": initial,
             "comment": comment,
             "date": datetime.now().strftime("%Y-%m-%d"),
             "time": datetime.now().strftime("%H:%M:%S")
@@ -259,20 +258,22 @@ async def post_comment(email: str, username: str, location: str, comment: str) -
         raise RuntimeError(str(e))
 
 
-async def get_comments(location: str, from_id: int, to_id: int) -> list[dict]:
+async def get_comments(location: str, from_id: int, to_id: int, latest_first: bool) -> list[dict]:
     """
     Get the comments for a location with a range of IDs.
 
     :param location: The location to get the comments from.
     :param from_id: The starting ID of the range.
     :param to_id: The ending ID of the range.
+    :param latest_first: True if the comments should be sorted from the latest, False otherwise. (highest ID first)
     :return: A list of comments.
     """
     try:
         pipeline = [
             {"$match": {"location": location}},
             {"$unwind": "$comments"},
-            {"$match": {"comments.id": {"$gte": from_id, "$lte": to_id}}},
+            {"$match": {"comments.id": {"$gte": from_id, "$lt": to_id}}},
+            {"$sort": {"comments.id": -1 if latest_first else 1}},
             {"$replaceRoot": {"newRoot": "$comments"}}
         ]
         cursor = DB.comments.aggregate(pipeline)
@@ -280,6 +281,32 @@ async def get_comments(location: str, from_id: int, to_id: int) -> list[dict]:
         return comments
     except OperationFailure as e:
         raise RuntimeError(str(e))
+
+
+async def get_latest_comments_ws(location: str, websocket: WebSocket) -> None:
+    """
+    Get the latest comments for a location and send it to the WebSocket. (for real-time updates)
+
+    :param location: The location to get the comments from.
+    :param websocket: The WebSocket to send the comments to.
+    """
+    pipeline = [
+        {"$match": {
+            "operationType": "update",
+            "ns.coll": "comments",
+            "fullDocument.location": location
+        }}
+    ]
+
+    async with DB.comments.watch(pipeline, full_document='updateLookup') as stream:
+        async for change in stream:
+            # Check if we have a full document and if it contains comments
+            if "fullDocument" in change and "comments" in change["fullDocument"]:
+                comments = change["fullDocument"]["comments"]
+                if comments:
+                    # Get and send only the most recently added comment
+                    latest_comment = comments[-1]
+                    await websocket.send_json(latest_comment)
 
 
 # === HELPERS ===
@@ -313,8 +340,6 @@ def send_verification_email(email: str, verification_code: str) -> None:
     :param email: The email to send the verification email to.
     :param verification_code: The verification code to include in the email.
     """
-    global VERIFICATION_CODE_EXPIRATION_MINUTES
-
     # INFO: This is my own internal service, so the URL is hardcoded
     url = "http://192.168.1.99:29998/email"
     data = {

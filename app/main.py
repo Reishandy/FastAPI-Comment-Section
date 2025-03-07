@@ -1,12 +1,14 @@
 from asyncio import create_task
 from contextlib import asynccontextmanager
 from typing import Annotated
+from datetime import datetime
 
 from fastapi import FastAPI, status, HTTPException, Body, Header
 from fastapi.params import Depends
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.websockets import WebSocket
 
 import app.database as db_handler
 
@@ -154,7 +156,7 @@ async def validate_token(Bearer: str | None = Header(None)) -> dict[str, str]:
     try:
         return await db_handler.validate_access_token(Bearer)
     except ValueError:
-        return {"email": "anonymous user", "username": "anonymous", "color": "#1d3557", "initial": "/"}
+        return {"email": "anonymous user", "username": "Anonymous", "color": "#1d3557", "initial": "/"}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
@@ -179,7 +181,7 @@ async def get_user(user: dict[str, str] = Depends(validate_token)) -> dict[str, 
     If the access token is provided and valid the user information will be returned, otherwise, it will return anonymous user.
 
     :param user: The user data from the access token
-    :return: {"message": "ok", "email": "<email>", "username": "<username>", "color": "<color>", "initial": "<initial>"} if the user is logged in, otherwise {"message": "ok", "email": "anonymous user", "username": "anonymous", "color": "#1d3557", "initial": "/"}
+    :return: {"message": "ok", "email": "<email>", "username": "<username>", "color": "<color>", "initial": "<initial>"} if the user is logged in, otherwise {"message": "ok", "email": "anonymous user", "username": "Anonymous", "color": "#1d3557", "initial": "/"}
     """
     return {"message": "ok", **user}
 
@@ -267,7 +269,7 @@ async def comment(
             "description": "Successful response",
             "content": {
                 "application/json": {"example": {"message": "ok",
-                                                 "comments": "[{'id': 1, 'email': '', 'username': 'anonymous', 'comment': 'Comment', 'date': '1980-01-31', 'time': '01:23:45'}, {'id': 2, 'email': 'john.doe@example.com', 'username': 'John', 'comment': 'Comment', 'date': '1980-01-31', 'time': '01:23:45'}}]"}}
+                                                 "comments": "[{'id': 2, 'email': '', 'username': 'Anonymous', 'color': '#1d3557', 'initial': '/', 'comment': 'Comment', 'date': '1980-01-31', 'time': '01:23:45'}, {'id': 1, 'email': 'john.doe@example.com', 'username': 'John', 'color': '#1d3557', 'initial': 'JD', 'comment': 'Comment', 'date': '1980-01-31', 'time': '01:23:45'}}]"}}
             },
         },
         status.HTTP_400_BAD_REQUEST: {
@@ -280,8 +282,9 @@ async def comment(
         }})
 async def get_comments(
         location,
-        comment_per_page: int = 10,
-        page_number: int = 1) -> dict[str, str]:
+        comment_per_page: int = 30,
+        page_number: int = 1,
+        latest_first: bool = True) -> dict[str, str]:
     """
     Get comments on the location. The comments will be returned based on the location and the page number.
     The comments will be sorted by the latest comment first.
@@ -289,7 +292,8 @@ async def get_comments(
     :param location: The location of the comment
     :param comment_per_page: The number of comments per page
     :param page_number: The page number
-    :return: {"message": "ok", "comments": "[{'id': 1, 'email': 'email', 'username': 'username', 'comment': 'Comment', 'date': 'date', 'time': 'time'}]"}
+    :param latest_first: Sort the comments by the latest comment first (highest id first)
+    :return: {"message": "ok", "comments": "[{'id': 1, '<email>': 'email', 'username': '<username>', 'color': '<color>', 'initial': '<initial>', 'comment': '<Comment>', 'date': '<date>', 'time': '<time>'}]"}
     """
     # Check if comment per page and page number is valid
     if comment_per_page < 1 or page_number < 1:
@@ -299,8 +303,26 @@ async def get_comments(
     from_id = (page_number - 1) * comment_per_page
     to_id = from_id + comment_per_page
     try:
-        comments = await db_handler.get_comments(location=location, from_id=from_id, to_id=to_id)
+        comments = await db_handler.get_comments(location=location, from_id=from_id, to_id=to_id, latest_first=latest_first)
         return {"message": "ok", "comments": str(comments)}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
+
+
+@app.websocket("/comment/{location:path}")
+async def ws_latest_comment(location, websocket: WebSocket):
+    """
+    Websocket endpoint to get the latest comments on the location.
+    The comments will be sent to the client in real-time.
+
+    :param location: The location of the comment
+    :param websocket: The websocket connection
+    """
+    await websocket.accept()
+
+    try:
+        await db_handler.get_latest_comments_ws(location, websocket)
+    except Exception as e:
+        print(f"ERROR:    {datetime.now()} - Websocket error: {str(e)}")
+        await websocket.close()
