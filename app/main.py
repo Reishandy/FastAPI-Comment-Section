@@ -1,10 +1,10 @@
+from asyncio import create_task
 from contextlib import asynccontextmanager
 from typing import Annotated
-from asyncio import create_task
 
 from fastapi import FastAPI, status, HTTPException, Body, Header
 from fastapi.params import Depends
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -16,21 +16,13 @@ class User(BaseModel):
     email: str = Field(..., description="The email of the user", examples=["john.doe@acme.com"])
 
 
-class Registration(User):
-    username: str = Field(..., description="The username of the user", examples=["user1", "user2"], min_length=3,
-                          max_length=20)
-
-
 class Verification(User):
     verification_code: str = Field(..., description="The verification code", examples=["123456"], min_length=6,
                                    max_length=6)
 
 
 class Comment(BaseModel):
-    location: str = Field(...,
-                          description="Identifier of the location. this is where you want to put the comment in, for example if you want to comment on a page, this can be the page url",
-                          examples=["example.com/page1"])
-    comment: str = Field(..., description="The comment", examples=["This is a comment"])
+    comment: str = Field(..., description="The comment", examples=["This is a comment"], min_length=1, max_length=1000)
 
 
 # === FASTAPI ===
@@ -40,8 +32,8 @@ async def lifespan(app: FastAPI):
     # Get the database connection
     await db_handler.get_database()
 
-    # Start the access token cleanup task
-    create_task(db_handler.remove_expired_tokens())
+    # Start the database cleaner
+    create_task(db_handler.clean_database())
 
     yield
 
@@ -75,45 +67,7 @@ async def root() -> dict[str, str]:
 
 
 @app.post(
-    "/register",
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        status.HTTP_201_CREATED: {
-            "description": "Data created",
-            "content": {"application/json": {"example": {"message": "ok"}}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Bad request",
-            "content": {"application/json": {"example": {"message": "User already exists"}}},
-        },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Internal server error",
-            "content": {"application/json": {"example": {"message": "Internal server error: <error message>"}}},
-        }})
-async def register(
-        registration_data: Annotated[Registration, Body(
-            title="User Registration details",
-            description="Endpoint to register a new user. Requires unused email, name, and password."
-        )]) -> dict[str, str]:
-    """
-    Register a new user with the email and username. The user will be placed in the verification queue.
-    Then go to /verify endpoint.
-
-    :param registration_data: User registration data
-    :return: {"message": "ok"} means the user has been placed in the verification queue
-    """
-    try:
-        await db_handler.email_verification_queue(**registration_data.model_dump())
-        return {"message": "ok"}
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Internal server error: {str(e)}")
-
-
-@app.post(
-    "/login",
+    "/token",
     status_code=status.HTTP_200_OK,
     responses={
         status.HTTP_200_OK: {
@@ -124,22 +78,18 @@ async def register(
             "description": "Bad request",
             "content": {"application/json": {"example": {"message": "<error message>"}}},
         },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Not found",
-            "content": {"application/json": {"example": {"message": "User not found"}}},
-        },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Internal server error",
             "content": {"application/json": {"example": {"message": "Internal server error: <error message>"}}},
         }})
 async def login(
         user_data: Annotated[User, Body(
-            title="User Login details",
-            description="Endpoint to login a user. Requires email and password."
+            title="User login details",
+            description="Endpoint to login the user. Requires email."
         )]) -> dict[str, str]:
     """
-    Login the user using the email. The user will be placed in the verification queue.
-    Then go to /verify endpoint.
+    Logs in the user using the email, this allows the user to get an access token to post comments as non-anonymous.
+    Needs to be followed by the verify endpoint to verify the user.
 
     :param user_data:  User login data
     :return: {"message": "ok"} means the user has been placed in the verification queue
@@ -148,10 +98,7 @@ async def login(
         await db_handler.email_verification_queue(**user_data.model_dump())
         return {"message": "ok"}
     except ValueError as e:
-        if str(e) == "404":
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
@@ -168,10 +115,6 @@ async def login(
         status.HTTP_400_BAD_REQUEST: {
             "description": "Bad request",
             "content": {"application/json": {"example": {"message": "<error message>"}}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Not found",
-            "content": {"application/json": {"example": {"message": "User not found"}}},
         },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Internal server error",
@@ -195,10 +138,7 @@ async def verify_email(
         access_token = await db_handler.verify_email(**verification_data.model_dump())
         return {"message": "ok", "access_token": access_token}
     except ValueError as e:
-        if str(e) == "404":
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
@@ -244,9 +184,47 @@ async def get_user(user: dict[str, str] = Depends(validate_token)) -> dict[str, 
     return {"message": "ok", **user}
 
 
+@app.post(
+    "/user",
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Successful response",
+            "content": {"application/json": {"example": {"message": "ok"}}},
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Bad request",
+            "content": {"application/json": {"example": {"message": "<error message>"}}},
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Internal server error",
+            "content": {"application/json": {"example": {"message": "Internal server error: <error message>"}}},
+        }})
+async def change_username(new_username: str = "", user: dict[str, str] = Depends(validate_token)) -> dict[
+    str, str]:
+    """
+    This endpoint is used to change the username of the logged-in user.
+
+    :param new_username:  The new username
+    :param user: The user data from the access token
+    :return: {"message": "ok"} if the username is successfully changed
+    """
+    if user["email"] == "":  # This means the user is not logged in, anonymous user
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please provide a valid access token")
+
+    try:
+        await db_handler.change_username(user["email"], new_username)
+        return {"message": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Internal server error: {str(e)}")
+
+
 # === APP ENDPOINT ===
 @app.post(
-    "/comment",
+    "/comment/{location:path}",
     status_code=status.HTTP_201_CREATED,
     responses={
         status.HTTP_201_CREATED: {
@@ -258,21 +236,23 @@ async def get_user(user: dict[str, str] = Depends(validate_token)) -> dict[str, 
             "content": {"application/json": {"example": {"message": "Internal server error: <error message>"}}},
         }})
 async def comment(
+        location,
         comment_data: Annotated[Comment, Body(
-            title="Comment details",
-            description="Endpoint to comment on a location. Requires location and comment."
+            title="Comment data",
+            description="Endpoint to post a comment. Requires comment body."
         )],
         user: dict[str, str] = Depends(validate_token)) -> dict[str, str]:
     """
     Post a comment on the location. The comment will be posted on the specified location / comment section id (from a page, etc).
     If the access token is provided and valid, the comment will be posted with the user information, otherwise, it will be posted as anonymous.
 
-    :param comment_data: Comment data containing of location and comment
+    :param location: The location of the comment
+    :param comment_data: Comment data containing the comment to be posted
     :param user: The user data from the access token, anonymous if token is invalid or not provided
     :return: {"message": "ok"} if the comment is successfully posted
     """
     try:
-        await db_handler.post_comment(**comment_data.model_dump(), **user)
+        await db_handler.post_comment(**user, location=location, comment=comment_data.comment)
         return {"message": "ok"}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

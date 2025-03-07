@@ -1,9 +1,10 @@
-from asyncio import sleep
+import base64
+from asyncio import sleep, gather
 from datetime import datetime, timedelta
-from re import match
 from os import getenv
-from urllib.parse import quote_plus
+from re import match
 from secrets import choice
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorClient
@@ -15,7 +16,9 @@ load_dotenv()
 
 # Global database variable
 DB: AsyncIOMotorDatabase
-EXPIRATION_DAYS = 30
+ACCESS_TOKEN_EXPIRATION_DAYS: int = 30
+VERIFICATION_CODE_EXPIRATION_MINUTES: int = 10
+CLEANUP_INTERVAL_SECONDS: int = 86400  # 1 day
 
 
 # === DATABASE ===
@@ -31,7 +34,7 @@ async def get_database() -> None:
     - MONGODB_HOST: The host of the MongoDB database.
     - MONGODB_PORT: The port of the MongoDB database.
     """
-    global DB
+    global DB, ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES
 
     # Create connection string from environment variables
     username = quote_plus(getenv("MONGODB_USERNAME"))
@@ -47,33 +50,52 @@ async def get_database() -> None:
     DB = client[database]
 
 
-async def remove_expired_tokens():
-    global EXPIRATION_DAYS
+async def clean_database() -> None:
+    """
+    Clean the database by removing expired access tokens and verification codes.
+    """
+    global ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES, CLEANUP_INTERVAL_SECONDS
+
+    # Get expiration from environment variables
+    ACCESS_TOKEN_EXPIRATION_DAYS = int(getenv("ACCESS_TOKEN_EXPIRATION_DAYS"))
+    VERIFICATION_CODE_EXPIRATION_MINUTES = int(getenv("VERIFICATION_CODE_EXPIRATION_MINUTES"))
+    CLEANUP_INTERVAL_SECONDS = int(getenv("CLEANUP_INTERVAL_SECONDS"))
 
     while True:
-        print(f"INF0:     {datetime.now()} - Running token cleanup")
+        print(f"INF0:     {datetime.now()} - Running database cleanup")
 
         # Calculate the expiration threshold
-        expiration_threshold = datetime.now() - timedelta(days=EXPIRATION_DAYS)
+        access_token_expiration_threshold = datetime.now() - timedelta(days=ACCESS_TOKEN_EXPIRATION_DAYS)
+        verification_code_expiration_threshold = datetime.now() - timedelta(
+            minutes=VERIFICATION_CODE_EXPIRATION_MINUTES)
 
-        # Remove expired tokens from the database
-        await DB.users.update_many(
-            {},
-            {"$pull": {"access_tokens": {"timestamp": {"$lt": expiration_threshold}}}}
-        )
+        try:
+            # Remove expired tokens and code from the database, runs simultaneously
+            token_result = await DB.users.update_many(
+                {"access_tokens.timestamp": {"$lt": access_token_expiration_threshold}},
+                {"$pull": {"access_tokens": {"timestamp": {"$lt": access_token_expiration_threshold}}}}
+            )
+            code_result = await DB.verification_queue.delete_many(
+                {"timestamp": {"$lt": verification_code_expiration_threshold}}
+            )
+            print(f"INFO:     {datetime.now()} - Deleted {token_result.modified_count} expired tokens")
+            print(f"INFO:     {datetime.now()} - Deleted {code_result.deleted_count} expired codes")
+        except Exception as e:
+            print(f"ERROR:    {datetime.now()} - Cleanup failed: {str(e)}")
+        finally:
+            print(f"INFO:     {datetime.now()} - Database cleanup completed")
 
-        # Sleep for a day before running the cleanup again
-        await sleep(86400)  # 86400 seconds = 1 day
-
+        # Sleep for the interval, prevent the cleanup from running too often and causing performance issues
+        await sleep(CLEANUP_INTERVAL_SECONDS)  # Default is 1 day
 
 
 # === MAIN FLOW ===
-async def email_verification_queue(email: str, username: str = None) -> None:
+async def email_verification_queue(email: str) -> None:
     """
-    Add the user into a registration or login queue, waiting for verification.
+    Add the user into a email verification queue and sends a verification code to the user's email,
+    waiting for verification.
 
     :param email: The email of the user.
-    :param username: The username of the user.
     """
     if not is_email_valid(email):
         raise ValueError("Invalid email")
@@ -81,33 +103,11 @@ async def email_verification_queue(email: str, username: str = None) -> None:
     verification_code = generate_numerical_verification_code()
 
     try:
-        # This check determines if the user is registering or logging in by checking if the username is provided,
-        # since the username is only used in the registration endpoint.
-        if username:
-            # From Register Endpoint
-            # Check if the user already exists
-            existing_user = await DB.users.find_one({"email": email})
-            if existing_user:
-                raise ValueError("User already exists")
-
-            await DB.verification_queue.replace_one(
-                {"email": email},
-                {"email": email, "username": username, "verification_code": verification_code,
-                 "timestamp": datetime.now()},
-                upsert=True
-            )
-        else:
-            # From Login Endpoint
-            # Check if the user is registered
-            existing_user = await DB.users.find_one({"email": email})
-            if not existing_user:
-                raise ValueError("404")  # User not found
-
-            await DB.verification_queue.replace_one(
-                {"email": email},
-                {"email": email, "verification_code": verification_code, "timestamp": datetime.now()},
-                upsert=True
-            )
+        await DB.verification_queue.replace_one(
+            {"email": email},
+            {"email": email, "verification_code": verification_code, "timestamp": datetime.now()},
+            upsert=True
+        )
 
         # Send the verification email
         send_verification_email(email, verification_code)
@@ -123,11 +123,13 @@ async def verify_email(email: str, verification_code: str) -> str:
     :param verification_code: The verification code.
     :return: An access token if the verification is successful.
     """
+    global VERIFICATION_CODE_EXPIRATION_MINUTES
+
     try:
         # Verification process
         user = await DB.verification_queue.find_one({"email": email})
         if not user:
-            raise ValueError("404")
+            raise ValueError("No verification found")
 
         stored_verification_code = user["verification_code"]
         timestamp = user["timestamp"]
@@ -135,27 +137,26 @@ async def verify_email(email: str, verification_code: str) -> str:
         # Perform verification
         if verification_code != stored_verification_code:
             raise ValueError("Invalid verification code")
-        if (datetime.now() - timestamp).total_seconds() > 600:  # 10 minutes
+        if timestamp < datetime.now() - timedelta(minutes=VERIFICATION_CODE_EXPIRATION_MINUTES):
             raise ValueError("Verification code expired")
 
-        # Logging in and/or registering process
-        access_token = generate_access_token() + "_" + email
+        # Update or insert the user into the users collection
+        access_token = generate_access_token(email)
 
-        # Check if the user is registering or logging in by checking if the user is registered in the users collection
+        # Check if the user exists in the users collection
         existing_user = await DB.users.find_one({"email": email})
         if existing_user:
-            # From Login Queue
-            # If the user is already registered, add the access token to the user's access_token list
+            # If the user is already existed, add the access token to the user's access_token list
             # Why using list? Because this will allow the user to log in from multiple devices.
             await DB.users.update_one({"email": email}, {
                 "$push": {"access_tokens": {"token": access_token, "timestamp": datetime.now()}}})
         else:
-            # From Register Queue
-            # If the user is not registered, insert the user into the users collection while adding the access token
-            await DB.users.insert_one({"email": email, "username": user["username"],
+            # If the user does not exist, insert the user into the users collection while adding the access token
+            username = email.split("@")[0]  # Default username is the email without the domain
+            await DB.users.insert_one({"email": email, "username": username,
                                        "access_tokens": [{"token": access_token, "timestamp": datetime.now()}]})
 
-        # Delete the user from the verification queue to prevent bug in the queue
+        # Delete the user from the verification queue
         await DB.verification_queue.delete_one({"email": email})
 
         return access_token
@@ -170,13 +171,14 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
     :param access_token: The access token to validate.
     :return: A dictionary containing the email and username of the user.
     """
-    global EXPIRATION_DAYS
+    global ACCESS_TOKEN_EXPIRATION_DAYS
 
     if not access_token or not is_access_token_valid(access_token):
         raise ValueError("Invalid access token")
 
     # Split the access token to get the email
-    email = access_token.split("_")[1]
+    decoded_access_token = decode_access_token(access_token)
+    email = decoded_access_token.split("_")[1]
 
     try:
         # Check if the access token is valid and get the token info
@@ -188,7 +190,7 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
         token_info = user["access_tokens"][0]
 
         # Check if the access token is expired (30 days from last usage)
-        expiration_threshold = datetime.now() - timedelta(days=EXPIRATION_DAYS)
+        expiration_threshold = datetime.now() - timedelta(days=ACCESS_TOKEN_EXPIRATION_DAYS)
         if token_info["timestamp"] < expiration_threshold:
             raise ValueError("Access token expired")
 
@@ -197,6 +199,22 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
                                   {"$set": {"access_tokens.$.timestamp": datetime.now()}}, upsert=True)
 
         return {"email": user["email"], "username": user["username"]}
+    except OperationFailure as e:
+        raise RuntimeError(str(e))
+
+
+async def change_username(email: str, new_username: str) -> None:
+    """
+    Change the username of the user.
+
+    :param email: The email of the user.
+    :param new_username: The new username to change.
+    """
+    if not new_username or len(new_username) < 3:
+        raise ValueError("Invalid username")
+
+    try:
+        await DB.users.update_one({"email": email}, {"$set": {"username": new_username}})
     except OperationFailure as e:
         raise RuntimeError(str(e))
 
@@ -309,14 +327,25 @@ def send_verification_email(email: str, verification_code: str) -> None:
         raise RuntimeError("Failed to send verification email")
 
 
-def generate_access_token() -> str:
+def generate_access_token(email: str) -> str:
     """
-    Generate a random access token.
-    INFO: This is not a secure token, but it is enough for this project.
+    Generate a random access token in the format of base64 encoded string with email as the payload.
 
     :return: A random access token as a string.
     """
-    return ''.join(choice("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(64))
+    token = ''.join(
+        choice("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(64)) + "_" + email
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("utf-8")
+
+
+def decode_access_token(access_token: str) -> str:
+    """
+    Decode the access token to get the email.
+
+    :param access_token: The access token to decode.
+    :return: The email of the user.
+    """
+    return base64.urlsafe_b64decode(access_token).decode("utf-8")
 
 
 def is_access_token_valid(access_token: str) -> bool:
@@ -326,6 +355,7 @@ def is_access_token_valid(access_token: str) -> bool:
     :param access_token: The access token to check.
     :return: True if the access token is valid, False otherwise.
     """
-    if bool(match(r'^[a-zA-Z0-9]{64}_[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', access_token)):
+    if bool(match(r'^[a-zA-Z0-9]{64}_[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$',
+                  decode_access_token(access_token))):
         return True
     return False
