@@ -12,31 +12,40 @@
         <!-- This needs to have a breakpoint for mobile, say 600width change title placement etc -->
         <!-- The breakpoint should be calculated from the parent and not the entire screen, since this will be modular -->
         <div id="comment-section"
-             style="width: 100%; height: 100%; background-color: #f0f0f0; display: flex; flex-direction: column; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+             style="width: 100%; height: 100%; background-color: #f0f0f0; display: flex; flex-direction: column;
+             border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
 
             <div id="title-bar"
-                 style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #007bff; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
+                 style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;
+                  background-color: #457b9d; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
+
                 <div style="display: flex; align-items: center;">
-                    <span style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
                     <!-- About Icon -->
+                    <span style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
                     <div style="font-size: 1.5em; font-weight: bold;">Comment Section</div>
                 </div>
-                <div style="display: flex; align-items: center;">
 
+                <div style="display: flex; align-items: center;">
                     <div style="display: flex; flex-direction: column; align-items: flex-end;">
                         <span id="username">Anonymous</span>
                         <span id="email" style="font-size: 0.8em; color: #ccc;">anonymous user</span>
                     </div>
+
                     <div id="initial"
-                         style="margin-left: 10px; width: 40px; height: 40px; background-color: #1d3557; color: white; display: flex; justify-content: center; align-items: center; border-radius: 8px;">
+                         style="margin-left: 10px; width: 40px; height: 40px; background-color: #1d3557; color: white;
+                          display: flex; justify-content: center; align-items: center; border-radius: 8px;">
                         /
                     </div>
+
                     <button id="sign-in-button"
-                            style="margin-left: 10px; padding: 5px 10px; background-color: white; color: #007bff; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
+                            style="margin-left: 10px; padding: 5px 10px; background-color: white; color: #457b9d;
+                            border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
                         Sign In
                     </button>
+
                     <button id="sign-out-button"
-                            style="margin-left: 10px; padding: 5px 10px; background-color: #ff4d4d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
+                            style="margin-left: 10px; padding: 5px 10px; background-color: #ff4d4d; color: white;
+                             border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
                         Sign Out
                     </button>
                 </div>
@@ -45,30 +54,36 @@
             <div id="comment-window" style="flex: 4; padding: 20px; overflow-y: auto; background-color: white;">
                 <!-- Comments will be added here by JavaScript -->
 
-                <div id="empty-comment">
-
-
+                <div id="empty-comment" style="text-align: center; color: #888; padding: 20px;">
+                    No comments yet. Be the first to comment!
                 </div>
 
                 <div id="load-more-container"
-                     style="text-align: center; margin: 30px 10px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.3s ease;">
-                    <div id="load-more-icon" style="font-size: 1.5em; color: #007bff; transition: transform 0.6s ease;">
+                     style="text-align: center; padding: 15px; background-color: #f8f9fa; max-width: fit-content;
+                     border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.3s ease;">
+
+                    <div id="load-more-icon" style="font-size: 1.5em; color: #457b9d; transition: transform 0.6s ease;">
                         &#x21BB;
                     </div> <!-- Refresh Icon -->
                     <a id="load-more-button" href="#"
-                       style="display: inline-block; color: #007bff; text-decoration: none; cursor: pointer; margin-top: 10px; font-weight: bold; padding: 8px 16px; border-radius: 4px; transition: all 0.3s ease;">
+                       style="display: inline-block; color: #457b9d; text-decoration: none; cursor: pointer; margin-top: 10px;
+                        font-weight: bold; padding: 8px 16px; border-radius: 4px; transition: all 0.3s ease;">
                         Load More
                     </a>
                 </div>
             </div>
 
             <div id="comment-compose"
-                 style="display: flex; justify-content: space-around; align-items: center; padding: 10px 20px; background-color: #f0f0f0; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+                 style="display: flex; justify-content: space-around; align-items: center; padding: 10px 20px;
+                  background-color: #f0f0f0; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+
                 <textarea id="comment-textarea"
-                          style="flex: 9; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: none; max-height: 200px; overflow-y: auto;"
-                          rows="1" placeholder="Type your comment..."></textarea>
+                          style="flex: 9; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: none;
+                          max-height: 200px; overflow-y: auto;" rows="1" placeholder="Type your comment..."></textarea>
+
                 <button id="comment-button"
-                        style="flex: 1; margin-left: 10px; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
+                        style="flex: 1; margin-left: 10px; padding: 10px; background-color: #457b9d; color: white;
+                        border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
                     &#x27A4;
                 </button> <!-- Send Icon -->
             </div>

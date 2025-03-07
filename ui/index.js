@@ -4,21 +4,21 @@ document.querySelectorAll('button').forEach(button => {
     button.addEventListener('mouseover', () => {
         if (button.id === 'sign-in-button') {
             button.style.backgroundColor = '#cccccc';
-            button.style.color = '#007bff';
+            button.style.color = '#457b9d';
         } else if (button.id === 'sign-out-button') {
             button.style.backgroundColor = '#cc0000';
         } else {
-            button.style.backgroundColor = '#0056b3';
+            button.style.backgroundColor = '#1D3557';
         }
     });
     button.addEventListener('mouseout', () => {
         if (button.id === 'sign-in-button') {
             button.style.backgroundColor = 'white';
-            button.style.color = '#007bff';
+            button.style.color = '#457b9d';
         } else if (button.id === 'sign-out-button') {
             button.style.backgroundColor = '#ff4d4d';
         } else {
-            button.style.backgroundColor = '#007bff';
+            button.style.backgroundColor = '#457b9d';
         }
     });
     button.addEventListener('mousedown', () => {
@@ -63,7 +63,7 @@ function addComment(initial, initialColor, username, email, date, time, commentT
 
     const commentBox = document.createElement('div');
     commentBox.style.position = 'relative';
-    commentBox.style.backgroundColor = '#e0e0e0';
+    commentBox.style.backgroundColor = '#f0f0f0';
     commentBox.style.borderRadius = '10px';
     commentBox.style.padding = '10px';
     commentBox.style.marginBottom = '10px';
@@ -76,16 +76,6 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     commentBox.style.opacity = '0';
     commentBox.style.transform = 'translateY(-20px)';
     commentBox.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-
-    const commentPointer = document.createElement('div');
-    commentPointer.style.content = '';
-    commentPointer.style.position = 'absolute';
-    commentPointer.style.top = '10px';
-    commentPointer.style.left = '-10px';
-    commentPointer.style.borderWidth = '10px';
-    commentPointer.style.borderStyle = 'solid';
-    commentPointer.style.borderColor = 'transparent #e0e0e0 transparent transparent';
-    commentBox.appendChild(commentPointer);
 
     const commentHeader = document.createElement('div');
     commentHeader.style.display = 'flex';
@@ -107,6 +97,7 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     commentInitial.style.alignItems = 'center';
     commentInitial.style.borderRadius = '8px';
     commentInitial.style.marginRight = '10px';
+    commentInitial.style.fontWeight = 'bold';
     commentInitial.textContent = initial;
 
     const userInfoContainer = document.createElement('div');
