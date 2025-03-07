@@ -1,105 +1,192 @@
-// === UI Script ===
-// Add hover and click animations for buttons
-document.querySelectorAll('button').forEach(button => {
+// Initialize API URL and comment location
+// -----------------------------------------
+const apiUrl = document.getElementById('api-url');
+const commentLocation = window.location.href.split("://")[1].split('?')[0];
+
+// ======================
+// =       UTILITY      =
+// ======================
+
+/**
+ * Applies the given styles to an element.
+ * @param {HTMLElement} element
+ * @param {Object} styles
+ */
+function setStyles(element, styles) {
+    Object.assign(element.style, styles);
+}
+
+/**
+ * Adds scale animation on mousedown/up events.
+ * @param {HTMLElement} element
+ */
+function addScaleAnimation(element) {
+    element.addEventListener('mousedown', () => {
+        element.style.transform = 'scale(0.95)';
+    });
+    element.addEventListener('mouseup', () => {
+        element.style.transform = 'scale(1)';
+    });
+}
+
+/**
+ * Returns the styles to apply when a button is hovered.
+ * @param {HTMLElement} button
+ * @returns {Object} CSS properties
+ */
+function getButtonHoverStyles(button) {
+    if (button.id === 'sign-in-button') {
+        return {backgroundColor: '#cccccc', color: '#457b9d'};
+    } else if (button.id === 'sign-out-button') {
+        return {backgroundColor: '#cc0000'};
+    } else {
+        return {backgroundColor: '#1D3557'};
+    }
+}
+
+/**
+ * Returns the styles to apply when the mouse leaves a button.
+ * @param {HTMLElement} button
+ * @returns {Object} CSS properties
+ */
+function getButtonOutStyles(button) {
+    if (button.id === 'sign-in-button') {
+        return {backgroundColor: 'white', color: '#457b9d'};
+    } else if (button.id === 'sign-out-button') {
+        return {backgroundColor: '#ff4d4d'};
+    } else {
+        return {backgroundColor: '#457b9d'};
+    }
+}
+
+// ======================
+// =      UI Script     =
+// ======================
+
+// Button Animations
+document.querySelectorAll('#comment-section button').forEach(button => {
     button.addEventListener('mouseover', () => {
-        if (button.id === 'sign-in-button') {
-            button.style.backgroundColor = '#cccccc';
-            button.style.color = '#457b9d';
-        } else if (button.id === 'sign-out-button') {
-            button.style.backgroundColor = '#cc0000';
-        } else {
-            button.style.backgroundColor = '#1D3557';
-        }
+        setStyles(button, getButtonHoverStyles(button));
     });
     button.addEventListener('mouseout', () => {
-        if (button.id === 'sign-in-button') {
-            button.style.backgroundColor = 'white';
-            button.style.color = '#457b9d';
-        } else if (button.id === 'sign-out-button') {
-            button.style.backgroundColor = '#ff4d4d';
-        } else {
-            button.style.backgroundColor = '#457b9d';
-        }
+        setStyles(button, getButtonOutStyles(button));
     });
-    button.addEventListener('mousedown', () => {
-        button.style.transform = 'scale(0.95)';
-    });
-    button.addEventListener('mouseup', () => {
-        button.style.transform = 'scale(1)';
-    });
+    addScaleAnimation(button);
 });
 
+// Load More Button Animations
 const loadMoreContainer = document.getElementById('load-more-container');
 const loadMoreIcon = document.getElementById('load-more-icon');
+if (loadMoreContainer && loadMoreIcon) {
+    loadMoreContainer.addEventListener('mouseover', () => {
+        setStyles(loadMoreContainer, {backgroundColor: '#e9ecef'});
+        loadMoreIcon.style.transform = 'rotate(180deg)';
+    });
+    loadMoreContainer.addEventListener('mouseout', () => {
+        setStyles(loadMoreContainer, {backgroundColor: '#f8f9fa'});
+        loadMoreIcon.style.transform = 'rotate(0)';
+    });
+    addScaleAnimation(loadMoreContainer);
+}
 
-loadMoreContainer.addEventListener('mouseover', () => {
-    loadMoreContainer.style.backgroundColor = '#e9ecef';
-    loadMoreIcon.style.transform = 'rotate(180deg)';
-});
-loadMoreContainer.addEventListener('mouseout', () => {
-    loadMoreContainer.style.backgroundColor = '#f8f9fa';
-    loadMoreIcon.style.transform = 'rotate(0)';
-});
-loadMoreContainer.addEventListener('mousedown', () => {
-    loadMoreContainer.style.transform = 'scale(0.95)';
-});
-loadMoreContainer.addEventListener('mouseup', () => {
-    loadMoreContainer.style.transform = 'scale(1)';
-});
+// "About" button: open GitHub repo in new tab
+const about = document.getElementById('about');
+if (about) {
+    about.addEventListener('click', () => {
+        window.open('https://github.com/Reishandy/FastAPI-Comment-Section', '_blank');
+    });
+}
 
-// Expand textarea up to 10 lines
+// Expand Textarea (up to 10 lines, max height 200px)
 const textarea = document.getElementById('comment-textarea');
-textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
-textarea.addEventListener('input', () => {
-    textarea.style.height = 'auto';
+if (textarea) {
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
-});
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    });
+}
 
-// === APP Script ===
-// Function to generate and append comment
+// ==================
+// =   APP Script   =
+// ==================
+
+// Helper function to escape HTML for security
+function escapeHTML(str) {
+    return str.replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+/**
+ * Generates and appends a comment element to the comment window.
+ * @param {string} initial - The user's initial.
+ * @param {string} initialColor - The background color for the initial.
+ * @param {string} username
+ * @param {string} email
+ * @param {string} date
+ * @param {string} time
+ * @param {string} commentText
+ * @param {boolean} [latest=false] - If true, the comment is added at the top with animation.
+ */
 function addComment(initial, initialColor, username, email, date, time, commentText, latest = false) {
     const commentWindow = document.getElementById('comment-window');
     const loadMoreContainer = document.getElementById('load-more-container');
 
+    // Create comment container
     const commentBox = document.createElement('div');
-    commentBox.style.position = 'relative';
-    commentBox.style.backgroundColor = '#f0f0f0';
-    commentBox.style.borderRadius = '10px';
-    commentBox.style.padding = '10px';
-    commentBox.style.marginBottom = '10px';
-    commentBox.style.maxWidth = '100%';
-    commentBox.style.minWidth = '30%';
-    commentBox.style.width = 'fit-content';
-    commentBox.style.display = 'flex';
-    commentBox.style.flexDirection = 'column';
-    commentBox.style.alignSelf = 'flex-start';
-    commentBox.style.opacity = '0';
-    commentBox.style.transform = 'translateY(-20px)';
-    commentBox.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    setStyles(commentBox, {
+        position: 'relative',
+        backgroundColor: '#f0f0f0',
+        borderRadius: '10px',
+        padding: '10px',
+        marginBottom: '10px',
+        maxWidth: '100%',
+        minWidth: '30%',
+        width: 'fit-content',
+        display: 'flex',
+        flexDirection: 'column',
+        alignSelf: 'flex-start',
+        opacity: '0',
+        transform: 'translateY(-20px)',
+        transition: 'opacity 0.5s ease, transform 0.5s ease'
+    });
 
+    // Create header container
     const commentHeader = document.createElement('div');
-    commentHeader.style.display = 'flex';
-    commentHeader.style.justifyContent = 'space-between';
-    commentHeader.style.alignItems = 'center';
-    commentHeader.style.marginBottom = '5px';
+    setStyles(commentHeader, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '5px'
+    });
 
+    // Identity container
     const commentIdentity = document.createElement('div');
-    commentIdentity.style.display = 'flex';
-    commentIdentity.style.alignItems = 'center';
+    setStyles(commentIdentity, {
+        display: 'flex',
+        alignItems: 'center'
+    });
 
+    // Avatar (initial)
     const commentInitial = document.createElement('div');
-    commentInitial.style.width = '40px';
-    commentInitial.style.height = '40px';
-    commentInitial.style.backgroundColor = initialColor;
-    commentInitial.style.color = 'white';
-    commentInitial.style.display = 'flex';
-    commentInitial.style.justifyContent = 'center';
-    commentInitial.style.alignItems = 'center';
-    commentInitial.style.borderRadius = '8px';
-    commentInitial.style.marginRight = '10px';
-    commentInitial.style.fontWeight = 'bold';
+    setStyles(commentInitial, {
+        width: '40px',
+        height: '40px',
+        backgroundColor: initialColor,
+        color: 'white',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: '8px',
+        marginRight: '10px',
+        fontWeight: 'bold'
+    });
     commentInitial.textContent = initial;
 
+    // User info container
     const userInfoContainer = document.createElement('div');
     userInfoContainer.style.display = 'flex';
     userInfoContainer.style.flexDirection = 'column';
@@ -113,10 +200,16 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     commentEmail.style.color = '#777';
     commentEmail.textContent = email;
 
+    userInfoContainer.appendChild(commentUsername);
+    userInfoContainer.appendChild(commentEmail);
+
+    // Date and time container
     const dateTimeContainer = document.createElement('div');
-    dateTimeContainer.style.display = 'flex';
-    dateTimeContainer.style.flexDirection = 'column';
-    dateTimeContainer.style.alignItems = 'flex-end';
+    setStyles(dateTimeContainer, {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end'
+    });
 
     const commentDate = document.createElement('span');
     commentDate.style.fontSize = '0.8em';
@@ -128,76 +221,64 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     commentTime.style.color = '#777';
     commentTime.textContent = time;
 
-    const commentTextElement = document.createElement('div');
-    commentTextElement.style.marginTop = '5px';
-    commentTextElement.innerHTML = escapeHTML(commentText).replace(/\n/g, '<br>');
-
-    userInfoContainer.appendChild(commentUsername);
-    userInfoContainer.appendChild(commentEmail);
     dateTimeContainer.appendChild(commentDate);
     dateTimeContainer.appendChild(commentTime);
+
+    // Assemble header
     commentIdentity.appendChild(commentInitial);
     commentIdentity.appendChild(userInfoContainer);
     commentHeader.appendChild(commentIdentity);
     commentHeader.appendChild(dateTimeContainer);
     commentBox.appendChild(commentHeader);
+
+    // Comment text element
+    const commentTextElement = document.createElement('div');
+    commentTextElement.style.marginTop = '5px';
+    // Escape HTML and preserve newlines
+    commentTextElement.innerHTML = escapeHTML(commentText).replace(/\n/g, '<br>');
     commentBox.appendChild(commentTextElement);
 
-
-    // First, add the comment to the DOM but keep it hidden for measurement
+    // Insert comment into DOM for height measurement
     commentBox.style.visibility = 'hidden';
     commentBox.style.position = 'absolute';
     commentBox.style.opacity = '0';
     commentWindow.insertBefore(commentBox, loadMoreContainer);
 
-    // Get the height of the newly created comment
-    const commentHeight = commentBox.offsetHeight + 10; // Adding margin
+    // Measure comment height (including margin)
+    const commentHeight = commentBox.offsetHeight + 10;
 
-    // Remove the temp comment
+    // Remove temporary comment box and reset styles
     commentWindow.removeChild(commentBox);
-
-    // Reset styles that were used for measurement
     commentBox.style.visibility = '';
     commentBox.style.position = 'relative';
 
-    // Apply "make space" animation to existing comments when adding at the top
+    // Animate insertion for latest comments
     if (latest) {
-        // Scroll to top
+        // Scroll to top and adjust existing comments
         commentWindow.scrollTop = 0;
-
         const firstChild = commentWindow.firstChild;
-
-        // Add "make space" animation to existing comments
         const existingComments = commentWindow.querySelectorAll(':scope > div:not(#load-more-container)');
         existingComments.forEach(comment => {
-            // Set transition if not already set
             if (!comment.style.transition) {
                 comment.style.transition = 'transform 0.5s ease';
             }
-
-            // Push down existing comments
             comment.style.transform = `translateY(${commentHeight}px)`;
-
-            // Reset position after animation
             setTimeout(() => {
                 comment.style.transition = '';
                 comment.style.transform = 'translateY(0)';
             }, 500);
         });
-
         setTimeout(() => {
             commentWindow.insertBefore(commentBox, firstChild);
-            // Trigger fade-in animation after a small delay
             setTimeout(() => {
                 commentBox.style.opacity = '1';
                 commentBox.style.transform = 'translateY(0)';
             }, 50);
-        }, 500)
+        }, 500);
     } else {
-        commentBox.style.transform = `translateY(20px)`;
+        // Append at the bottom with a fade-in effect
+        commentBox.style.transform = 'translateY(20px)';
         commentWindow.insertBefore(commentBox, loadMoreContainer);
-
-        // Trigger fade-in animation after a small delay
         setTimeout(() => {
             commentBox.style.opacity = '1';
             commentBox.style.transform = 'translateY(0)';
@@ -205,29 +286,197 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     }
 }
 
-// Helper function to escape HTML
-function escapeHTML(str) {
-    return str.replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+/**
+ * Displays a popup with a title, HTML body, and OK/Cancel buttons.
+ * @param {string} title
+ * @param {string} bodyHtml - HTML content for the popup body.
+ * @param {Function} [onOk] - Callback when OK is clicked.
+ * @param {Function} [onCancel] - Callback when Cancel (or close) is clicked.
+ */
+function showPopup(title, bodyHtml, onOk, onCancel) {
+    const commentSection = document.getElementById('comment-section');
+
+    // Create popup overlay
+    const popupOverlay = document.createElement('div');
+    setStyles(popupOverlay, {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: '1000',
+        opacity: '0',
+        transition: 'opacity 0.3s ease'
+    });
+
+    // Create popup container
+    const popupContainer = document.createElement('div');
+    setStyles(popupContainer, {
+        width: '80%',
+        maxWidth: '500px',
+        backgroundColor: '#fff',
+        borderRadius: '8px',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+        display: 'flex',
+        flexDirection: 'column',
+        transform: 'scale(0.8)',
+        transition: 'transform 0.3s ease'
+    });
+
+    // Title bar
+    const titleBar = document.createElement('div');
+    setStyles(titleBar, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '10px 20px',
+        backgroundColor: '#457b9d',
+        color: 'white',
+        borderTopLeftRadius: '8px',
+        borderTopRightRadius: '8px'
+    });
+
+    const titleText = document.createElement('div');
+    titleText.style.fontSize = '1.5em';
+    titleText.style.fontWeight = 'bold';
+    titleText.textContent = title;
+
+    const closeButton = document.createElement('span');
+    closeButton.style.cursor = 'pointer';
+    closeButton.textContent = '✖';
+    closeButton.addEventListener('click', () => {
+        popupOverlay.style.opacity = '0';
+        popupContainer.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            commentSection.removeChild(popupOverlay);
+            if (onCancel) onCancel();
+        }, 300);
+    });
+
+    titleBar.appendChild(titleText);
+    titleBar.appendChild(closeButton);
+
+    // Popup body
+    const body = document.createElement('div');
+    body.style.padding = '20px';
+    body.innerHTML = bodyHtml;
+
+    // Popup footer with OK and Cancel buttons
+    const footer = document.createElement('div');
+    setStyles(footer, {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        padding: '10px 20px',
+        backgroundColor: '#f0f0f0',
+        borderBottomLeftRadius: '8px',
+        borderBottomRightRadius: '8px'
+    });
+
+    const okButton = document.createElement('button');
+    okButton.textContent = 'OK';
+    setStyles(okButton, {
+        marginRight: '10px',
+        padding: '5px 10px',
+        backgroundColor: '#457b9d',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer'
+    });
+    okButton.addEventListener('click', () => {
+        popupOverlay.style.opacity = '0';
+        popupContainer.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            commentSection.removeChild(popupOverlay);
+            if (onOk) onOk();
+        }, 300);
+    });
+    okButton.addEventListener('mouseover', () => {
+        okButton.style.backgroundColor = '#1D3557';
+    });
+    okButton.addEventListener('mouseout', () => {
+        okButton.style.backgroundColor = '#457b9d';
+    });
+    addScaleAnimation(okButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    setStyles(cancelButton, {
+        padding: '5px 10px',
+        backgroundColor: '#ff4d4d',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer'
+    });
+    cancelButton.addEventListener('click', () => {
+        popupOverlay.style.opacity = '0';
+        popupContainer.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            commentSection.removeChild(popupOverlay);
+            if (onCancel) onCancel();
+        }, 300);
+    });
+    cancelButton.addEventListener('mouseover', () => {
+        cancelButton.style.backgroundColor = '#cc0000';
+    });
+    cancelButton.addEventListener('mouseout', () => {
+        cancelButton.style.backgroundColor = '#ff4d4d';
+    });
+    addScaleAnimation(cancelButton);
+
+    footer.appendChild(okButton);
+    footer.appendChild(cancelButton);
+
+    // Assemble popup components
+    popupContainer.appendChild(titleBar);
+    popupContainer.appendChild(body);
+    popupContainer.appendChild(footer);
+    popupOverlay.appendChild(popupContainer);
+    commentSection.appendChild(popupOverlay);
+
+    // Trigger popup animation
+    setTimeout(() => {
+        popupOverlay.style.opacity = '1';
+        popupContainer.style.transform = 'scale(1)';
+    }, 10);
 }
 
+// ===================
+// =    Auth Flow    =
+// ===================
+
+// Sign in click event listener
+const signInButton = document.getElementById('sign-in-button');
+signInButton.addEventListener('click', () => {
+
+    showPopup('Sign In', signInPopupBody, () => {}, () => {
+        // TODO: sign out
+    });
+});
+
+// Sign out click event listener
 
 
+// Function to sign in
+function signIn() {}
+function verifyToken() {}
+
+// Function to sign out, this only needs to remove the token from local storage
 
 
+// ===================
+// =    Main Flow    =
+// ===================
 
-
-
-
-
-
-
-
-
-
+// get token and location
+// get and store user info
+// get and store comments
+// add comments to the UI
 
 
 // TODO: DEBUG REMOVE

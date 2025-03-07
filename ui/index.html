@@ -13,7 +13,8 @@
         <!-- The breakpoint should be calculated from the parent and not the entire screen, since this will be modular -->
         <div id="comment-section"
              style="width: 100%; height: 100%; background-color: #f0f0f0; display: flex; flex-direction: column;
-             border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+             border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: relative">
+            <a id="api-url" style="visibility: hidden; height: 0">http://127.0.0.1:8000/</a>
 
             <div id="title-bar"
                  style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;
@@ -21,7 +22,7 @@
 
                 <div style="display: flex; align-items: center;">
                     <!-- About Icon -->
-                    <span style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
+                    <span id="about" style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
                     <div style="font-size: 1.5em; font-weight: bold;">Comment Section</div>
                 </div>
 
