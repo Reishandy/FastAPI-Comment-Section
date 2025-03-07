@@ -154,12 +154,13 @@ async def verify_email(email: str, verification_code: str) -> str:
             # If the user does not exist, insert the user into the users collection while adding the access token
             username = email.split("@")[0]  # Default username is the email without the domain
             await DB.users.insert_one({"email": email, "username": username,
-                                       "access_tokens": [{"token": access_token, "timestamp": datetime.now()}]})
+                                       "access_tokens": [{"token": access_token, "timestamp": datetime.now()}],
+                                       "color": pick_random_color(), "initial": make_initials(username)})
 
-        # Delete the user from the verification queue
-        await DB.verification_queue.delete_one({"email": email})
+            # Delete the user from the verification queue
+            await DB.verification_queue.delete_one({"email": email})
 
-        return access_token
+            return access_token
     except OperationFailure as e:
         raise RuntimeError(str(e))
 
@@ -169,7 +170,7 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
     Validate the access token by checking if the access token is in the user's access_token list.
 
     :param access_token: The access token to validate.
-    :return: A dictionary containing the email and username of the user.
+    :return: A dictionary containing the email, username, color, and initial of the user.
     """
     global ACCESS_TOKEN_EXPIRATION_DAYS
 
@@ -198,7 +199,7 @@ async def validate_access_token(access_token: str) -> dict[str, str]:
         await DB.users.update_one({"email": email, "access_tokens.token": access_token},
                                   {"$set": {"access_tokens.$.timestamp": datetime.now()}}, upsert=True)
 
-        return {"email": user["email"], "username": user["username"]}
+        return {"email": user["email"], "username": user["username"], "color": user["color"], "initial": user["initial"]}
     except OperationFailure as e:
         raise RuntimeError(str(e))
 
@@ -312,13 +313,16 @@ def send_verification_email(email: str, verification_code: str) -> None:
     :param email: The email to send the verification email to.
     :param verification_code: The verification code to include in the email.
     """
+    global VERIFICATION_CODE_EXPIRATION_MINUTES
+
     # INFO: This is my own internal service, so the URL is hardcoded
     url = "http://192.168.1.99:29998/email"
     data = {
         "recipient": email,
         "subject": "Rei's Comment Section - Verify your email",
         "plain": "Your Verification Code is: " + verification_code,
-        "html": "<table width=\"100%\" style=\"max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);\"> <tr> <td align=\"center\"> <h2 style=\"color: #007bff;\">Rei\'s Comment Section</h2> <p style=\"font-size: 16px; color: #555;\">Your verification code is:</p> <p style=\"font-size: 24px; font-weight: bold; color: #007bff; background: #f0f8ff; padding: 10px 20px; border-radius: 5px; display: inline-block;\"> " + verification_code + " </p> <p>This code will expire in 10 minutes.</p> <p style=\"color: #777;\">If you didn\'t request this code, please ignore this email.</p> </td> </tr> <tr> <td align=\"center\" style=\"padding-top: 20px; border-top: 1px solid #ddd;\"> <p style=\"font-size: 12px; color: #777;\"> Need help? Contact me at <a href=\"mailto:akbar@reishandy.my.id\" style=\"color: #007bff; text-decoration: none;\">akbar@reishandy.my.id</a> </p> <p style=\"font-size: 12px; color: #888;\"> <em>Legal Disclaimer:</em> This email may contain confidential information. If you are not the intended recipient, please delete it immediately. </p> </td> </tr></table>"
+        "html": "<table width=\"100%\" style=\"max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);\"> <tr> <td align=\"center\"> <h2 style=\"color: #007bff;\">Rei\'s Comment Section</h2> <p style=\"font-size: 16px; color: #555;\">Your verification code is:</p> <p style=\"font-size: 24px; font-weight: bold; color: #007bff; background: #f0f8ff; padding: 10px 20px; border-radius: 5px; display: inline-block;\"> " + verification_code + " </p> <p>This code will expire in " + str(
+            VERIFICATION_CODE_EXPIRATION_MINUTES) + " minutes.</p> <p style=\"color: #777;\">If you didn\'t request this code, please ignore this email.</p> </td> </tr> <tr> <td align=\"center\" style=\"padding-top: 20px; border-top: 1px solid #ddd;\"> <p style=\"font-size: 12px; color: #777;\"> Need help? Contact me at <a href=\"mailto:akbar@reishandy.my.id\" style=\"color: #007bff; text-decoration: none;\">akbar@reishandy.my.id</a> </p> <p style=\"font-size: 12px; color: #888;\"> <em>Legal Disclaimer:</em> This email may contain confidential information. If you are not the intended recipient, please delete it immediately. </p> </td> </tr></table>"
     }
 
     # Send the data using a requests's POST
@@ -359,3 +363,26 @@ def is_access_token_valid(access_token: str) -> bool:
                   decode_access_token(access_token))):
         return True
     return False
+
+
+def pick_random_color() -> str:
+    """
+    Pick a random color from a predefined list of colors.
+
+    :return: A random color in hexadecimal format.
+    """
+    colors = [
+        "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#A133FF",
+        "#33FFF5", "#F5FF33", "#FF8C33", "#8C33FF", "#33FF8C"
+    ]
+    return choice(colors)
+
+
+def make_initials(username: str) -> str:
+    """
+    Create initials from a given name string.
+
+    :param username: The name string to create initials from.
+    :return: A string containing the initials.
+    """
+    return ''.join(word[0].upper() for word in username.split())

@@ -149,12 +149,12 @@ async def validate_token(Bearer: str | None = Header(None)) -> dict[str, str]:
     Validate the access token and return the user information.
 
     :param Bearer: The access token
-    :return: {"email": "<email>", "username": "<username>"} or {"email": "", "username": "anonymous"} if the token is invalid or not provided
+    :return: {"email": "<email>", "username": "<username>", "color": "<color>", "initial": "<initial>"} if the user is logged in, otherwise {"email": "anonymous user", "username": "anonymous", "color": "#1d3557", "initial": "/"}
     """
     try:
         return await db_handler.validate_access_token(Bearer)
     except ValueError:
-        return {"email": "", "username": "anonymous"}
+        return {"email": "anonymous user", "username": "anonymous", "color": "#1d3557", "initial": "/"}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
@@ -179,7 +179,7 @@ async def get_user(user: dict[str, str] = Depends(validate_token)) -> dict[str, 
     If the access token is provided and valid the user information will be returned, otherwise, it will return anonymous user.
 
     :param user: The user data from the access token
-    :return: {"message": "ok", "email": "<email>", "username": "<username>"} or {"message": "ok", "email": "", "username": "anonymous"}
+    :return: {"message": "ok", "email": "<email>", "username": "<username>", "color": "<color>", "initial": "<initial>"} if the user is logged in, otherwise {"message": "ok", "email": "anonymous user", "username": "anonymous", "color": "#1d3557", "initial": "/"}
     """
     return {"message": "ok", **user}
 
