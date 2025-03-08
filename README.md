@@ -2,6 +2,8 @@
 
 Rei's Comment Section is a modular, embeddable comment system designed for websites and web applications. Built with FastAPI and MongoDB, it offers real-time updates via WebSockets, smooth animations, and a mobile-responsive UI. It also features email-based user verification and a simple authentication flow, allowing users to post comments either as guests or as signed-in users.
 
+ ![Preview](preview.webp)
+
 ## Demo
 
 You can try a live demo of the comment section here: [https://comment.reishandy.my.id](https://comment.reishandy.my.id)
