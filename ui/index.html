@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UI</title>
 </head>
 <body>
@@ -27,7 +28,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;
                          background-color: #457b9d; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
 
-                        <div style="font-size: 1.5em; font-weight: bold;">Sign in</div>
+                        <div id="overlay-title" style="font-size: 1.5em; font-weight: bold;">Overlay</div>
                         <span id="overlay-close-button" style="cursor: pointer;">✖</span>
                     </div>
 
@@ -82,14 +83,15 @@
                 <div style="display: flex; align-items: center;">
                     <!-- About Icon -->
                     <span id="about" style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
-                    <div style="font-size: 1.5em; font-weight: bold;">Comment Section change name TODO</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">Comment Section</div>
                 </div>
 
-                <div style="display: flex; align-items: center;">
+                <div style="display: flex;">
                     <div style="display: flex; flex-direction: column; align-items: flex-end;">
                         <div style="display: flex; flex-direction: row">
                             <span id="username" style="transition: opacity 0.3s ease">Anonymous</span>
-                            <span id="username-edit-button" style="transform: rotateZ(110deg); margin-left: 5px; cursor: pointer">&#9998;</span>
+                            <span id="username-edit-button"
+                                  style="transform: rotateZ(110deg); margin-left: 5px; cursor: pointer">&#9998;</span>
                         </div>
 
                         <span id="email" style="font-size: 0.8em; color: #ccc; transition: opacity 0.3s ease">anonymous user</span>
@@ -157,6 +159,7 @@
                 </button> <!-- Send Icon -->
             </div>
 
+            <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
             <script src="index.js"></script>
         </div>
 

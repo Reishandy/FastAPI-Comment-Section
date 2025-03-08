@@ -13,6 +13,8 @@ let user = {
 let verificationEmail = '';
 let currentPagination = 1;
 let ws = null;
+let loadedRealTimeComments = 0;
+let doneFirstLoad = false;
 
 // HTML
 const commentWindow = document.getElementById('comment-window');
@@ -21,6 +23,7 @@ const loadMoreIcon = document.getElementById('load-more-icon');
 const about = document.getElementById('about');
 const textarea = document.getElementById('comment-textarea');
 const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlay-title');
 const overlayCloseButton = document.getElementById('overlay-close-button');
 
 const username = document.getElementById('username');
@@ -136,7 +139,7 @@ async function sendToApi(method, path, token, body = null) {
  * @param {string} [id='spinner'] - Optional custom ID for the spinner
  * @returns {HTMLElement} - The spinner element
  */
-function toggleSpinner(parent, show, id = 'spinner') {
+function toggleSpinner(parent, show, id = 'spinner', isButton = false) {
     // Look for existing spinner with this ID
     let spinner = document.getElementById(id);
 
@@ -146,24 +149,35 @@ function toggleSpinner(parent, show, id = 'spinner') {
         spinner = document.createElement('div');
         spinner.id = id;
         spinner.style.cssText = `
-            display: none; 
-            flex-direction: column; 
-            align-items: center; 
+            display: none;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
             width: 100%;
         `;
 
         // Create spinner animation element
         const spinnerCircle = document.createElement('div');
-        spinnerCircle.style.cssText = `
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(69, 123, 157, 0.2);
-            border-top: 4px solid #457b9d;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 10px;
-        `;
+        if (isButton) {
+            spinnerCircle.style.cssText = `
+                width: 20px;
+                height: 20px;
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                border-top: 2px solid white;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            `;
+        } else {
+            spinnerCircle.style.cssText = `
+                width: 40px;
+                height: 40px;
+                border: 4px solid rgba(69, 123, 157, 0.2);
+                border-top: 4px solid #457b9d;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin-bottom: 10px;
+            `;
+        }
 
         // Make sure we have the animation
         if (!document.getElementById('spinner-animation')) {
@@ -190,7 +204,6 @@ function toggleSpinner(parent, show, id = 'spinner') {
 
     return spinner;
 }
-
 // ======================
 // =       UI Init      =
 // ======================
@@ -241,17 +254,74 @@ if (accessToken === '' || accessToken === null) {
     usernameEditButton.style.display = 'none';
 }
 
+// Call the responsive function on window resize and on initial load
+window.addEventListener('resize', applyResponsiveStyles);
+document.addEventListener('DOMContentLoaded', applyResponsiveStyles);
+
+
 // ==================
 // =    Function    =
 // ==================
+/**
+ * Applies responsive styles to the comment section based on the width.
+ */
+function applyResponsiveStyles() {
+    const commentSection = document.getElementById('comment-section');
+    const titleBar = document.getElementById('title-bar');
+    const usernameEditButton = document.getElementById('username-edit-button');
+    const signInButton = document.getElementById('sign-in-button');
+    const signOutButton = document.getElementById('sign-out-button');
+
+    if (commentSection.offsetWidth < 600) {
+        titleBar.style.flexDirection = 'column';
+        titleBar.style.alignItems = 'flex-start';
+
+        const firstChild = titleBar.children[0];
+        const lastChild = titleBar.children[1];
+        firstChild.style.marginBottom = '10px';
+        lastChild.style.flexDirection = 'row';
+        lastChild.style.justifyContent = 'center';
+        lastChild.style.width = '100%';
+
+        usernameEditButton.style.transform = 'rotateZ(0)';
+        usernameEditButton.style.marginLeft = '5px';
+        usernameEditButton.style.marginTop = '0';
+
+        signInButton.style.marginLeft = '10px';
+        signOutButton.style.marginLeft = '10px';
+    } else {
+        titleBar.style.flexDirection = 'row';
+        titleBar.style.alignItems = 'center';
+
+        const firstChild = titleBar.children[0];
+        const lastChild = titleBar.children[1];
+        firstChild.style.marginBottom = '0';
+        lastChild.style.display = 'flex';
+        lastChild.style.width = 'fit-content';
+
+        usernameEditButton.style.transform = 'rotateZ(110deg)';
+        usernameEditButton.style.marginLeft = '5px';
+        usernameEditButton.style.marginTop = '0';
+
+        signInButton.style.marginLeft = '10px';
+        signOutButton.style.marginLeft = '10px';
+    }
+}
+
 
 // Helper function to escape HTML for security
+/**
+ * Escapes HTML characters in a string.
+ * @param str - The string to escape.
+ * @returns {*} - The escaped string.
+ */
 function escapeHTML(str) {
-    return str.replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    return str
+        .replaceAll(/&/g, '&amp;')
+        .replaceAll(/</g, '&lt;')
+        .replaceAll(/>/g, '&gt;')
+        .replaceAll(/"/g, '&quot;')
+        .replaceAll(/'/g, '&#039;');
 }
 
 /**
@@ -365,8 +435,12 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     // Comment text element
     const commentTextElement = document.createElement('div');
     commentTextElement.style.marginTop = '5px';
-    // Escape HTML and preserve newlines
-    commentTextElement.innerHTML = escapeHTML(commentText).replace(/\n/g, '<br>');
+    // Escape HTML and render markdown
+    if (typeof marked !== 'undefined') {
+        commentTextElement.innerHTML = marked.parse(commentText.replace(/\n/g, '<br>'));
+    } else {
+        commentTextElement.innerHTML = commentText.replace(/\n/g, '<br>');
+    }
     commentBox.appendChild(commentTextElement);
 
     // Insert comment into DOM for height measurement
@@ -388,7 +462,7 @@ function addComment(initial, initialColor, username, email, date, time, commentT
         // Scroll to top and adjust existing comments
         commentWindow.scrollTop = 0;
         const firstChild = commentWindow.firstChild;
-        const existingComments = commentWindow.querySelectorAll(':scope > div:not(#load-more-container)');
+        const existingComments = commentWindow.querySelectorAll(':scope > div');
         existingComments.forEach(comment => {
             if (!comment.style.transition) {
                 comment.style.transition = 'transform 0.5s ease';
@@ -510,11 +584,9 @@ async function getComments(page) {
         .then(response => {
             if (response.statusCode === 200) {
                 comments = JSON.parse(response.jsonResponse.comments
-                    .replace(/'/g, '"')
-                    .replace(/True/g, 'true')
-                    .replace(/False/g, 'false')
-                );
-
+                    .replaceAll(/'/g, '"')
+                    .replaceAll(/True/g, 'true')
+                    .replaceAll(/False/g, 'false'));
             } else {
                 // Show error message
                 console.error(response.jsonResponse.message);
@@ -590,9 +662,8 @@ function connectWebSocket() {
             );
 
             // Hide empty comment message if it's showing
-            if (emptyComment && emptyComment.style.display !== 'none') {
+            if (emptyComment) {
                 emptyComment.style.display = 'none';
-                loadMoreContainer.style.display = 'block';
             }
         };
 
@@ -626,12 +697,14 @@ signOutButton.addEventListener('click', () => {
     accessToken = '';
     updateUser()
     showSignInOrOut()
+    usernameEditButton.style.display = 'none';
 });
 
 // Sign in
 // Open sign in specific elements in overlay
 signInButton.addEventListener('click', () => {
     openOverlay()
+    overlayTitle.innerText = 'Sign In';
 
     // Hide verification code and new username input
     verificationContainer.style.display = 'none';
@@ -715,6 +788,7 @@ verifyCodeButton.addEventListener('click', () => {
                 localStorage.setItem(tokenLocalStorageKey, accessToken);
                 updateUser();
                 showSignInOrOut()
+                usernameEditButton.style.display = 'block';
 
                 // Close overlay
                 overlay.style.opacity = '0';
@@ -732,6 +806,7 @@ verifyCodeButton.addEventListener('click', () => {
 // Change username
 usernameEditButton.addEventListener('click', () => {
     openOverlay()
+    overlayTitle.innerText = 'Change Username';
 
     // Hide email input and verification code
     emailContainer.style.display = 'none';
@@ -795,8 +870,13 @@ loadMoreContainer.addEventListener('click', async () => {
     loadMoreIcon.style.animation = 'spin 1s linear infinite';
 
     currentPagination += 1;
+    let comments = await getComments(currentPagination);
 
-    const comments = await getComments(currentPagination);
+    if (loadedRealTimeComments > 0 && !doneFirstLoad) {
+        // omit the comments that are already loaded
+        comments = comments.slice(loadedRealTimeComments, comments.length)
+        doneFirstLoad = true;
+    }
 
     // Stop spinning animation when comments are loaded
     loadMoreIcon.style.animation = '';
@@ -813,9 +893,14 @@ loadMoreContainer.addEventListener('click', async () => {
                 comment.comment
             );
         });
+
+        if (comments.length < commentAmountPerPage) {
+            noMoreComment.style.display = 'block';
+            loadMoreContainer.style.display = 'none';
+        }
     } else {
-        noMoreComment.style.display = 'block';
-        loadMoreContainer.style.display = 'none';
+        noMoreComment.style.display = 'none';
+        loadMoreContainer.style.display = 'block';
     }
 });
 
@@ -826,17 +911,32 @@ commentButton.addEventListener('click', async () => {
         return;
     }
 
-    // Escape newlines and trim whitespace
+    // Spinner
+    commentButton.innerHTML = '';
+    commentButton.disabled = true;
+    commentButton.style.cursor = 'not-allowed';
+    toggleSpinner(commentButton, true, 'comment-spinner-send', true);
+
+
+    // Escape newlines and trim whitespace, also escape html
     commentText = commentTextarea.value.replace('\\', '\\\\')
+    commentText = escapeHTML(commentText).trim()
 
     await sendToApi('POST', 'comment/' + commentLocation, accessToken, {comment: commentText})
         .then(response => {
             if (response.statusCode === 201) {
+                // disable spinner
+                commentButton.innerHTML = '&#x27A4;';
+                commentButton.disabled = false;
+                commentButton.style.cursor = 'pointer';
+                toggleSpinner(commentButton, false, 'comment-spinner-send', true);
+
                 commentTextarea.value = '';
                 commentTextarea.dispatchEvent(new Event('input'));
 
                 // Scroll to top
                 commentWindow.scrollTop = 0;
+                loadedRealTimeComments += 1;
             } else {
                 // Show error message
                 console.error(response.jsonResponse.message);
