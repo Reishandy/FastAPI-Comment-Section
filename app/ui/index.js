@@ -3,6 +3,7 @@ const tokenLocalStorageKey = 'Reis_Comment_Section_token';
 const apiUrl = document.getElementById('api-url').textContent;
 const commentLocation = window.location.href.split('://')[1].split('?')[0];
 const commentAmountPerPage = 10;
+
 let accessToken = localStorage.getItem(tokenLocalStorageKey);
 let user = {
     username: 'Anonymous',
@@ -621,6 +622,11 @@ async function initComment() {
         // Hide empty comments message and display load more button
         if (emptyComment) {
             emptyComment.style.display = 'none';
+        }
+
+        if (comments.length < commentAmountPerPage) {
+            noMoreComment.style.display = 'block';
+        } else {
             loadMoreContainer.style.display = 'block';
         }
 
@@ -673,6 +679,7 @@ function connectWebSocket() {
             // Hide empty comment message if it's showing
             if (emptyComment) {
                 emptyComment.style.display = 'none';
+                noMoreComment.style.display = 'block';
             }
         };
 
@@ -911,8 +918,8 @@ loadMoreContainer.addEventListener('click', async () => {
             loadMoreContainer.style.display = 'none';
         }
     } else {
-        noMoreComment.style.display = 'none';
-        loadMoreContainer.style.display = 'block';
+        noMoreComment.style.display = 'block';
+        loadMoreContainer.style.display = 'none';
     }
 });
 
