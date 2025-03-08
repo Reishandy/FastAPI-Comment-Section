@@ -67,7 +67,7 @@ async def root(request: Request) -> HTMLResponse:
 
     Usage:
     ```html
-    <iframe src="https://<api_url>/" width="100%" height="100%" frameborder="0"></iframe>
+    <iframe src="https://<api_url>/" width="100%" height="100%" style="border: 0"></iframe>
     ```
     """
     forwarded_proto = request.headers.get("X-Forwarded-Proto", "http")

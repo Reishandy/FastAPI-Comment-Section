@@ -37,7 +37,7 @@ You can try a live demo of the comment section here: [https://comment-section.re
 To embed the comment section on your webpage, insert an iframe into your HTML:
 
 ```html
-<iframe src="https://comment-section.reishandy.my.id" width="100%" height="100%" frameborder="0"></iframe>
+<iframe src="https://comment-section.reishandy.my.id" width="80%" height="100%" style="border: 0"></iframe>
 ```
 
 Make sure to replace `https://comment-section.reishandy.my.id` with your actual deployment URL.
