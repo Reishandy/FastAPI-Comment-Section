@@ -1,7 +1,10 @@
 // Initialize configuration and data
 const tokenLocalStorageKey = 'Reis_Comment_Section_token';
 const apiUrl = document.getElementById('api-url').textContent;
-const commentLocation = window.location.href.split('://')[1].split('?')[0];
+const parentUrl = (window.location !== window.parent.location)
+            ? document.referrer
+            : document.location.href;
+const commentLocation = parentUrl.split('://')[1].split('?')[0];
 const commentAmountPerPage = 10;
 const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.split('://')[1]}comment/${commentLocation}`;
 
@@ -248,7 +251,6 @@ about.addEventListener('click', () => {
 });
 
 // Expand Textarea (up to 10 lines, max height 200px)
-textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
 textarea.addEventListener('input', () => {
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
