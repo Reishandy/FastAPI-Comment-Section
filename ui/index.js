@@ -229,6 +229,16 @@ loadMoreContainer.addEventListener('mouseout', () => {
 });
 addScaleAnimation(loadMoreContainer);
 
+// Span button animations
+document.querySelectorAll('.span-button').forEach(span => {
+    span.addEventListener('mouseover', () => {
+        span.style.transform = 'scale(1.3)';
+    });
+    span.addEventListener('mouseout', () => {
+        span.style.transform = 'scale(1)';
+    });
+});
+
 // "About" button: open GitHub repo in new tab
 about.addEventListener('click', () => {
     window.open('https://github.com/Reishandy/FastAPI-Comment-Section', '_blank');
@@ -299,7 +309,6 @@ function applyResponsiveStyles() {
         lastChild.style.display = 'flex';
         lastChild.style.width = 'fit-content';
 
-        usernameEditButton.style.transform = 'rotateZ(110deg)';
         usernameEditButton.style.marginLeft = '5px';
         usernameEditButton.style.marginTop = '0';
 
@@ -824,10 +833,10 @@ changeUsernameButton.addEventListener('click', () => {
     // Reset error message
     ErrorContainer.style.display = 'none';
 
-    const newUsername = newUsernameInput.value;
-    if (newUsername.trim() === '') {
+    const newUsername = newUsernameInput.value.trim();
+    if (newUsername.length < 3 || newUsername.length > 20) {
         ErrorContainer.style.display = 'flex';
-        ErrorText.textContent = 'Username cannot be empty.';
+        ErrorText.textContent = 'Username must be between 3 and 20 characters.';
         return;
     }
 
@@ -847,6 +856,9 @@ changeUsernameButton.addEventListener('click', () => {
                 ErrorContainer.style.display = 'flex';
                 ErrorText.textContent = response.jsonResponse.message;
             }
+        })
+        .finally( () => {
+            newUsernameInput.value = ''
         });
 });
 
@@ -925,12 +937,6 @@ commentButton.addEventListener('click', async () => {
     await sendToApi('POST', 'comment/' + commentLocation, accessToken, {comment: commentText})
         .then(response => {
             if (response.statusCode === 201) {
-                // disable spinner
-                commentButton.innerHTML = '&#x27A4;';
-                commentButton.disabled = false;
-                commentButton.style.cursor = 'pointer';
-                toggleSpinner(commentButton, false, 'comment-spinner-send', true);
-
                 commentTextarea.value = '';
                 commentTextarea.dispatchEvent(new Event('input'));
 
@@ -941,5 +947,12 @@ commentButton.addEventListener('click', async () => {
                 // Show error message
                 console.error(response.jsonResponse.message);
             }
+        })
+        .finally(() => {
+            // disable spinner
+            commentButton.innerHTML = '&#x27A4;';
+            commentButton.disabled = false;
+            commentButton.style.cursor = 'pointer';
+            toggleSpinner(commentButton, false, 'comment-spinner-send', true);
         });
 });

@@ -29,7 +29,7 @@
                          background-color: #457b9d; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
 
                         <div id="overlay-title" style="font-size: 1.5em; font-weight: bold;">Overlay</div>
-                        <span id="overlay-close-button" style="cursor: pointer;">✖</span>
+                        <span id="overlay-close-button" class="span-button" style="cursor: pointer; transition: all 0.3s ease">✖</span>
                     </div>
 
                     <div style="padding: 20px; text-align: center;">
@@ -82,16 +82,17 @@
 
                 <div style="display: flex; align-items: center;">
                     <!-- About Icon -->
-                    <span id="about" style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
+                    <span id="about" class="span-button" style="margin-right: 10px; cursor: pointer; display: flex;
+                          align-items: center; transition: all 0.3s ease">&#x1F6C8;</span>
                     <div style="font-size: 1.5em; font-weight: bold;">Comment Section</div>
                 </div>
 
                 <div style="display: flex;">
                     <div style="display: flex; flex-direction: column; align-items: flex-end;">
                         <div style="display: flex; flex-direction: row">
+                            <span id="username-edit-button" class="span-button"
+                                  style="margin-right: 5px; cursor: pointer">&#9998;</span>
                             <span id="username" style="transition: opacity 0.3s ease">Anonymous</span>
-                            <span id="username-edit-button"
-                                  style="transform: rotateZ(110deg); margin-left: 5px; cursor: pointer">&#9998;</span>
                         </div>
 
                         <span id="email" style="font-size: 0.8em; color: #ccc; transition: opacity 0.3s ease">anonymous user</span>
