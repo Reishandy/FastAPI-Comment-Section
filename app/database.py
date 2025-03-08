@@ -35,7 +35,7 @@ async def get_database() -> None:
     - MONGODB_HOST: The host of the MongoDB database.
     - MONGODB_PORT: The port of the MongoDB database.
     """
-    global DB, ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES, CLEANUP_INTERVAL_SECONDS
+    global DB
 
     # Create connection string from environment variables
     username = quote_plus(getenv("MONGODB_USERNAME"))
@@ -55,6 +55,8 @@ async def clean_database() -> None:
     """
     Clean the database by removing expired access tokens and verification codes.
     """
+    global ACCESS_TOKEN_EXPIRATION_DAYS, VERIFICATION_CODE_EXPIRATION_MINUTES, CLEANUP_INTERVAL_SECONDS
+
     # Get expiration from environment variables
     ACCESS_TOKEN_EXPIRATION_DAYS = int(getenv("ACCESS_TOKEN_EXPIRATION_DAYS"))
     VERIFICATION_CODE_EXPIRATION_MINUTES = int(getenv("VERIFICATION_CODE_EXPIRATION_MINUTES"))

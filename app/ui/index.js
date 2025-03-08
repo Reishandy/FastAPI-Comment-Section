@@ -3,6 +3,7 @@ const tokenLocalStorageKey = 'Reis_Comment_Section_token';
 const apiUrl = document.getElementById('api-url').textContent;
 const commentLocation = window.location.href.split('://')[1].split('?')[0];
 const commentAmountPerPage = 10;
+const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.split('://')[1]}comment/${commentLocation}`;
 
 let accessToken = localStorage.getItem(tokenLocalStorageKey);
 let user = {
@@ -205,6 +206,7 @@ function toggleSpinner(parent, show, id = 'spinner', isButton = false) {
 
     return spinner;
 }
+
 // ======================
 // =       UI Init      =
 // ======================
@@ -446,11 +448,7 @@ function addComment(initial, initialColor, username, email, date, time, commentT
     const commentTextElement = document.createElement('div');
     commentTextElement.style.marginTop = '5px';
     // Escape HTML and render markdown
-    if (typeof marked !== 'undefined') {
-        commentTextElement.innerHTML = marked.parse(commentText.replace(/\n/g, '<br>'));
-    } else {
-        commentTextElement.innerHTML = commentText.replace(/\n/g, '<br>');
-    }
+    commentTextElement.innerHTML = window.markdownit().render(commentText).replace(/\n/g, '<br>');
     commentBox.appendChild(commentTextElement);
 
     // Insert comment into DOM for height measurement
@@ -652,8 +650,6 @@ function connectWebSocket() {
     if (ws) {
         ws.close();
     }
-
-    const wsUrl = `ws://${apiUrl.split('://')[1]}comment/${commentLocation}`;
 
     try {
         ws = new WebSocket(wsUrl);
@@ -864,7 +860,7 @@ changeUsernameButton.addEventListener('click', () => {
                 ErrorText.textContent = response.jsonResponse.message;
             }
         })
-        .finally( () => {
+        .finally(() => {
             newUsernameInput.value = ''
         });
 });
