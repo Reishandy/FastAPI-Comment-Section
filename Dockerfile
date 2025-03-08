@@ -1,5 +1,5 @@
 # Use the official Python image
-FROM python:3.9
+FROM python:3.13
 
 # Set the working directory in the container
 WORKDIR /code
@@ -8,6 +8,7 @@ WORKDIR /code
 COPY ./requirements.txt /code/requirements.txt
 
 # Install dependencies
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 # Copy the rest of the application code
