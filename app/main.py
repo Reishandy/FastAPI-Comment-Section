@@ -4,11 +4,10 @@ from typing import Annotated
 from datetime import datetime
 
 from fastapi import FastAPI, status, HTTPException, Body, Header
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.params import Depends
 from pydantic import BaseModel, Field
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, FileResponse, HTMLResponse
 from starlette.websockets import WebSocket
 
 import app.database as db_handler
@@ -42,15 +41,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# TODO: Remove this before production
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 # Custom exception handler to change {detail} to {message} for more unified response
 @app.exception_handler(HTTPException)
@@ -65,16 +55,44 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
 @app.get(
     "/",
     status_code=status.HTTP_200_OK,
+    response_class=HTMLResponse,
     responses={
         status.HTTP_200_OK: {
             "description": "Successful response",
-            "content": {"application/json": {"example": {"message": "ok"}}},
+            "content": {"text/html": {"example": "<div>Comment Section</div>"}},
         }})
-async def root(request: Request) -> dict[str, str]:
+async def root(request: Request) -> HTMLResponse:
     """
-    Root endpoint, used to check if the service is running.
+    Returns the div html embed code for the comment section
+
+    Usage:
+    ```html
+    <iframe src="https://<api_url>/" width="100%" height="100%" frameborder="0"></iframe>
+    ```
     """
-    return {"message": "ok", "url": str(request.url)}
+    with open("app/ui/mini.html") as f:
+        comment_section_html = f.read()
+
+    return HTMLResponse(content=comment_section_html, status_code=status.HTTP_200_OK)
+
+
+@app.get(
+    "/js",
+    status_code=status.HTTP_200_OK,
+    response_class=FileResponse,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Successful response",
+            "content": {"text/javascript": {"example": "mini.js"}},
+        }}
+)
+async def javascript() -> FileResponse:
+    """
+    Returns the mini.js file for the comment section
+
+    :return: mini.js file
+    """
+    return FileResponse('app/ui/mini.js', media_type='text/javascript')
 
 
 @app.post(
