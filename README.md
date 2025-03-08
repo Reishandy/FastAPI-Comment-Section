@@ -6,7 +6,7 @@ Rei's Comment Section is a modular, embeddable comment system designed for websi
 
 ## Demo
 
-You can try a live demo of the comment section here: [https://comment.reishandy.my.id](https://comment.reishandy.my.id)
+You can try a live demo of the comment section here: [https://comment-section.reishandy.my.id](https://comment-section.reishandy.my.id)
 
 ## Features
 
@@ -37,10 +37,10 @@ You can try a live demo of the comment section here: [https://comment.reishandy.
 To embed the comment section on your webpage, insert an iframe into your HTML:
 
 ```html
-<iframe src="https://comment.reishandy.my.id" width="100%" height="100%" frameborder="0"></iframe>
+<iframe src="https://comment-section.reishandy.my.id" width="100%" height="100%" frameborder="0"></iframe>
 ```
 
-Make sure to replace `https://comment.reishandy.my.id` with your actual deployment URL.
+Make sure to replace `https://comment-section.reishandy.my.id` with your actual deployment URL.
 
 ### API Endpoints
 
