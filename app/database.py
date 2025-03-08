@@ -316,7 +316,7 @@ async def get_latest_comments_ws(location: str, websocket: WebSocket) -> None:
     """
     pipeline = [
         {"$match": {
-            "operationType": "update",
+            "operationType": {"$in": ["update", "insert"]},
             "ns.coll": "comments",
             "fullDocument.location": location
         }}
