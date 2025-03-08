@@ -16,6 +16,65 @@
              border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: relative">
             <a id="api-url" style="visibility: hidden; height: 0">http://127.0.0.1:8000/</a>
 
+            <div id="overlay"
+                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);
+                 justify-content: center; align-items: center; z-index: 1000; display: none;
+                 opacity: 0; transition: opacity 0.3s ease;">
+
+                <div style="width: 80%; max-width: 500px; background-color: #fff; border-radius: 8px;
+                     box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;
+                         background-color: #457b9d; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
+
+                        <div style="font-size: 1.5em; font-weight: bold;">Sign in</div>
+                        <span id="overlay-close-button" style="cursor: pointer;">✖</span>
+                    </div>
+
+                    <div style="padding: 20px; text-align: center;">
+                        <div id="email-container" style="display: none; align-items: center; margin-bottom: 10px;
+                             opacity: 0; transform: translateY(0); transition: opacity 0.5s ease, transform 0.5s ease;">
+
+                            <input id="email-input" type="email" placeholder="Enter your email"
+                                   style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;"/>
+                            <button id="send-email-button" style="margin-left: 10px; padding: 10px; background-color: #457b9d;
+                            color: white; border: none; border-radius: 4px;">
+                                Send
+                            </button>
+                        </div>
+
+                        <div id="verification-container" style="display: none; align-items: center; margin-bottom: 10px;
+                             opacity: 0; transform: translateY(-20px); transition: opacity 0.5s ease, transform 0.5s ease;">
+
+                            <input id="verification-code-input" type="text" placeholder="Enter verification code"
+                                   style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;"/>
+                            <button id="verify-code-button"
+                                    style="margin-left: 10px; padding: 10px; background-color: #457b9d; color: white;
+                                    border: none; border-radius: 4px;">
+                                Verify
+                            </button>
+                        </div>
+
+                        <div id="new-username-container" style="display: none; align-items: center; margin-bottom: 10px;
+                             opacity: 0; transform: translateY(-20px); transition: opacity 0.5s ease, transform 0.5s ease;">
+
+                            <input id="new-username-input" type="text" placeholder="Enter new username"
+                                   style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;"/>
+                            <button id="change-username-button"
+                                    style="margin-left: 10px; padding: 10px; background-color: #457b9d; color: white;
+                                    border: none; border-radius: 4px;">
+                                Change
+                            </button>
+                        </div>
+
+                        <div id="error-container" style="display: none; padding: 10px; background-color: #ffcccc;
+                             color: #cc0000; border-radius: 4px; justify-content: center">
+                            <p id="error-text" style="margin: 0;">Error here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="title-bar"
                  style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px;
                   background-color: #457b9d; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px;">
@@ -23,30 +82,35 @@
                 <div style="display: flex; align-items: center;">
                     <!-- About Icon -->
                     <span id="about" style="margin-right: 10px; cursor: pointer; display: flex; align-items: center;">&#x1F6C8;</span>
-                    <div style="font-size: 1.5em; font-weight: bold;">Comment Section</div>
+                    <div style="font-size: 1.5em; font-weight: bold;">Comment Section change name TODO</div>
                 </div>
 
                 <div style="display: flex; align-items: center;">
                     <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                        <span id="username">Anonymous</span>
-                        <span id="email" style="font-size: 0.8em; color: #ccc;">anonymous user</span>
+                        <div style="display: flex; flex-direction: row">
+                            <span id="username" style="transition: opacity 0.3s ease">Anonymous</span>
+                            <span id="username-edit-button" style="transform: rotateZ(110deg); margin-left: 5px; cursor: pointer">&#9998;</span>
+                        </div>
+
+                        <span id="email" style="font-size: 0.8em; color: #ccc; transition: opacity 0.3s ease">anonymous user</span>
                     </div>
 
                     <div id="initial"
                          style="margin-left: 10px; width: 40px; height: 40px; background-color: #1d3557; color: white;
-                          display: flex; justify-content: center; align-items: center; border-radius: 8px;">
+                         display: flex; justify-content: center; align-items: center; border-radius: 8px;
+                         transition: opacity 0.3s ease">
                         /
                     </div>
 
                     <button id="sign-in-button"
-                            style="margin-left: 10px; padding: 5px 10px; background-color: white; color: #457b9d;
-                            border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
+                            style="margin-left: 10px; padding: 5px 10px; background-color: white; color: #457b9d; display: block;
+                            border: none; border-radius: 4px; cursor: pointer; opacity: 0; transition: background 0.3s, opacity 0.3s ease">
                         Sign In
                     </button>
 
                     <button id="sign-out-button"
-                            style="margin-left: 10px; padding: 5px 10px; background-color: #ff4d4d; color: white;
-                             border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s, transform 0.1s;">
+                            style="margin-left: 10px; padding: 5px 10px; background-color: #ff4d4d; color: white; display: none;
+                            border: none; border-radius: 4px; cursor: pointer; opacity: 0; transition: background 0.3s, opacity 0.3s ease">
                         Sign Out
                     </button>
                 </div>
@@ -60,7 +124,7 @@
                 </div>
 
                 <div id="load-more-container"
-                     style="text-align: center; padding: 15px; background-color: #f8f9fa; max-width: fit-content;
+                     style="text-align: center; padding: 15px; background-color: #f8f9fa; max-width: fit-content; display: none;
                      border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.3s ease;">
 
                     <div id="load-more-icon" style="font-size: 1.5em; color: #457b9d; transition: transform 0.6s ease;">
@@ -71,6 +135,10 @@
                         font-weight: bold; padding: 8px 16px; border-radius: 4px; transition: all 0.3s ease;">
                         Load More
                     </a>
+                </div>
+
+                <div id="no-more-comment" style="text-align: center; color: #888; padding: 20px; display: none">
+                    That is it, no more comments available.
                 </div>
             </div>
 

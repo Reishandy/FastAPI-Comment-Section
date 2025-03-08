@@ -1,7 +1,52 @@
-// Initialize API URL and comment location
-// -----------------------------------------
-const apiUrl = document.getElementById('api-url');
-const commentLocation = window.location.href.split("://")[1].split('?')[0];
+// Initialize configuration and data
+const tokenLocalStorageKey = 'Reis_Comment_Section_token';
+const apiUrl = document.getElementById('api-url').textContent;
+const commentLocation = window.location.href.split('://')[1].split('?')[0];
+const commentAmountPerPage = 10;
+let accessToken = localStorage.getItem(tokenLocalStorageKey);
+let user = {
+    username: 'Anonymous',
+    email: 'anonymous user',
+    initial: '/',
+    color: '#1d3557'
+}
+let verificationEmail = '';
+let currentPagination = 1;
+let ws = null;
+
+// HTML
+const commentWindow = document.getElementById('comment-window');
+const loadMoreContainer = document.getElementById('load-more-container');
+const loadMoreIcon = document.getElementById('load-more-icon');
+const about = document.getElementById('about');
+const textarea = document.getElementById('comment-textarea');
+const overlay = document.getElementById('overlay');
+const overlayCloseButton = document.getElementById('overlay-close-button');
+
+const username = document.getElementById('username');
+const email = document.getElementById('email');
+const initial = document.getElementById('initial');
+
+const signInButton = document.getElementById('sign-in-button');
+const signOutButton = document.getElementById('sign-out-button');
+const emailContainer = document.getElementById('email-container');
+const sendEmailButton = document.getElementById('send-email-button');
+const emailInput = document.getElementById('email-input');
+const verificationContainer = document.getElementById('verification-container');
+const verificationCodeInput = document.getElementById('verification-code-input');
+const verifyCodeButton = document.getElementById('verify-code-button');
+const ErrorContainer = document.getElementById('error-container');
+const ErrorText = document.getElementById('error-text');
+
+const newUsernameContainer = document.getElementById('new-username-container');
+const newUsernameInput = document.getElementById('new-username-input');
+const changeUsernameButton = document.getElementById('change-username-button');
+const usernameEditButton = document.getElementById('username-edit-button');
+
+const emptyComment = document.getElementById('empty-comment');
+const noMoreComment = document.getElementById('no-more-comment');
+const commentTextarea = document.getElementById('comment-textarea');
+const commentButton = document.getElementById('comment-button');
 
 // ======================
 // =       UTILITY      =
@@ -59,8 +104,95 @@ function getButtonOutStyles(button) {
     }
 }
 
+/**
+ * Sends a request to the API.
+ * @param {string} path - The API endpoint path.
+ * @param {string} token - The Bearer accessToken for authorization.
+ * @param {Object} body - The request body.
+ * @param {string} method - The HTTP method (e.g., 'GET', 'POST', 'PUT', 'DELETE').
+ * @returns {Promise<{statusCode: number, jsonResponse: Object}>} - The status code and JSON response.
+ */
+async function sendToApi(method, path, token, body = null) {
+    const response = await fetch(apiUrl + path, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Bearer': token
+        },
+        body: method !== 'GET' ? JSON.stringify(body) : undefined
+    });
+
+    const jsonResponse = await response.json();
+    return {
+        statusCode: response.status,
+        jsonResponse: jsonResponse
+    };
+}
+
+/**
+ * Shows or hides a loading spinner.
+ * @param {HTMLElement} parent - The parent element to attach the spinner to
+ * @param {boolean} show - Whether to show (true) or hide (false) the spinner
+ * @param {string} [id='spinner'] - Optional custom ID for the spinner
+ * @returns {HTMLElement} - The spinner element
+ */
+function toggleSpinner(parent, show, id = 'spinner') {
+    // Look for existing spinner with this ID
+    let spinner = document.getElementById(id);
+
+    // Create spinner if it doesn't exist
+    if (!spinner) {
+        // Create spinner container
+        spinner = document.createElement('div');
+        spinner.id = id;
+        spinner.style.cssText = `
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            width: 100%;
+        `;
+
+        // Create spinner animation element
+        const spinnerCircle = document.createElement('div');
+        spinnerCircle.style.cssText = `
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(69, 123, 157, 0.2);
+            border-top: 4px solid #457b9d;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        `;
+
+        // Make sure we have the animation
+        if (!document.getElementById('spinner-animation')) {
+            const spinnerStyle = document.createElement('style');
+            spinnerStyle.id = 'spinner-animation';
+            spinnerStyle.textContent = `
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(spinnerStyle);
+        }
+
+        // Assemble spinner
+        spinner.appendChild(spinnerCircle);
+
+        // Add to parent
+        parent.insertBefore(spinner, parent.firstChild);
+    }
+
+    // Show or hide the spinner
+    spinner.style.display = show ? 'flex' : 'none';
+
+    return spinner;
+}
+
 // ======================
-// =      UI Script     =
+// =       UI Init      =
 // ======================
 
 // Button Animations
@@ -75,40 +207,42 @@ document.querySelectorAll('#comment-section button').forEach(button => {
 });
 
 // Load More Button Animations
-const loadMoreContainer = document.getElementById('load-more-container');
-const loadMoreIcon = document.getElementById('load-more-icon');
-if (loadMoreContainer && loadMoreIcon) {
-    loadMoreContainer.addEventListener('mouseover', () => {
-        setStyles(loadMoreContainer, {backgroundColor: '#e9ecef'});
-        loadMoreIcon.style.transform = 'rotate(180deg)';
-    });
-    loadMoreContainer.addEventListener('mouseout', () => {
-        setStyles(loadMoreContainer, {backgroundColor: '#f8f9fa'});
-        loadMoreIcon.style.transform = 'rotate(0)';
-    });
-    addScaleAnimation(loadMoreContainer);
-}
+loadMoreContainer.addEventListener('mouseover', () => {
+    setStyles(loadMoreContainer, {backgroundColor: '#e9ecef'});
+});
+loadMoreContainer.addEventListener('mouseout', () => {
+    setStyles(loadMoreContainer, {backgroundColor: '#f8f9fa'});
+    loadMoreIcon.style.transform = 'rotate(0)';
+});
+addScaleAnimation(loadMoreContainer);
 
 // "About" button: open GitHub repo in new tab
-const about = document.getElementById('about');
-if (about) {
-    about.addEventListener('click', () => {
-        window.open('https://github.com/Reishandy/FastAPI-Comment-Section', '_blank');
-    });
-}
+about.addEventListener('click', () => {
+    window.open('https://github.com/Reishandy/FastAPI-Comment-Section', '_blank');
+});
 
 // Expand Textarea (up to 10 lines, max height 200px)
-const textarea = document.getElementById('comment-textarea');
-if (textarea) {
+textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+textarea.addEventListener('input', () => {
+    textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
-    textarea.addEventListener('input', () => {
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
-    });
+});
+
+// Overlay Close Button
+overlayCloseButton.addEventListener('click', () => {
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 300);
+});
+
+// Check edit username accesToken
+if (accessToken === '' || accessToken === null) {
+    usernameEditButton.style.display = 'none';
 }
 
 // ==================
-// =   APP Script   =
+// =    Function    =
 // ==================
 
 // Helper function to escape HTML for security
@@ -132,9 +266,6 @@ function escapeHTML(str) {
  * @param {boolean} [latest=false] - If true, the comment is added at the top with animation.
  */
 function addComment(initial, initialColor, username, email, date, time, commentText, latest = false) {
-    const commentWindow = document.getElementById('comment-window');
-    const loadMoreContainer = document.getElementById('load-more-container');
-
     // Create comment container
     const commentBox = document.createElement('div');
     setStyles(commentBox, {
@@ -287,228 +418,428 @@ function addComment(initial, initialColor, username, email, date, time, commentT
 }
 
 /**
- * Displays a popup with a title, HTML body, and OK/Cancel buttons.
- * @param {string} title
- * @param {string} bodyHtml - HTML content for the popup body.
- * @param {Function} [onOk] - Callback when OK is clicked.
- * @param {Function} [onCancel] - Callback when Cancel (or close) is clicked.
+ * Sets the user display based on the current user object.
  */
-function showPopup(title, bodyHtml, onOk, onCancel) {
-    const commentSection = document.getElementById('comment-section');
+function setUserDisplay() {
+    // Fade out current user display
+    username.style.opacity = '0';
+    email.style.opacity = '0';
+    initial.style.opacity = '0';
 
-    // Create popup overlay
-    const popupOverlay = document.createElement('div');
-    setStyles(popupOverlay, {
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: '1000',
-        opacity: '0',
-        transition: 'opacity 0.3s ease'
-    });
-
-    // Create popup container
-    const popupContainer = document.createElement('div');
-    setStyles(popupContainer, {
-        width: '80%',
-        maxWidth: '500px',
-        backgroundColor: '#fff',
-        borderRadius: '8px',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-        display: 'flex',
-        flexDirection: 'column',
-        transform: 'scale(0.8)',
-        transition: 'transform 0.3s ease'
-    });
-
-    // Title bar
-    const titleBar = document.createElement('div');
-    setStyles(titleBar, {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '10px 20px',
-        backgroundColor: '#457b9d',
-        color: 'white',
-        borderTopLeftRadius: '8px',
-        borderTopRightRadius: '8px'
-    });
-
-    const titleText = document.createElement('div');
-    titleText.style.fontSize = '1.5em';
-    titleText.style.fontWeight = 'bold';
-    titleText.textContent = title;
-
-    const closeButton = document.createElement('span');
-    closeButton.style.cursor = 'pointer';
-    closeButton.textContent = '✖';
-    closeButton.addEventListener('click', () => {
-        popupOverlay.style.opacity = '0';
-        popupContainer.style.transform = 'scale(0.8)';
-        setTimeout(() => {
-            commentSection.removeChild(popupOverlay);
-            if (onCancel) onCancel();
-        }, 300);
-    });
-
-    titleBar.appendChild(titleText);
-    titleBar.appendChild(closeButton);
-
-    // Popup body
-    const body = document.createElement('div');
-    body.style.padding = '20px';
-    body.innerHTML = bodyHtml;
-
-    // Popup footer with OK and Cancel buttons
-    const footer = document.createElement('div');
-    setStyles(footer, {
-        display: 'flex',
-        justifyContent: 'flex-end',
-        padding: '10px 20px',
-        backgroundColor: '#f0f0f0',
-        borderBottomLeftRadius: '8px',
-        borderBottomRightRadius: '8px'
-    });
-
-    const okButton = document.createElement('button');
-    okButton.textContent = 'OK';
-    setStyles(okButton, {
-        marginRight: '10px',
-        padding: '5px 10px',
-        backgroundColor: '#457b9d',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer'
-    });
-    okButton.addEventListener('click', () => {
-        popupOverlay.style.opacity = '0';
-        popupContainer.style.transform = 'scale(0.8)';
-        setTimeout(() => {
-            commentSection.removeChild(popupOverlay);
-            if (onOk) onOk();
-        }, 300);
-    });
-    okButton.addEventListener('mouseover', () => {
-        okButton.style.backgroundColor = '#1D3557';
-    });
-    okButton.addEventListener('mouseout', () => {
-        okButton.style.backgroundColor = '#457b9d';
-    });
-    addScaleAnimation(okButton);
-
-    const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    setStyles(cancelButton, {
-        padding: '5px 10px',
-        backgroundColor: '#ff4d4d',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer'
-    });
-    cancelButton.addEventListener('click', () => {
-        popupOverlay.style.opacity = '0';
-        popupContainer.style.transform = 'scale(0.8)';
-        setTimeout(() => {
-            commentSection.removeChild(popupOverlay);
-            if (onCancel) onCancel();
-        }, 300);
-    });
-    cancelButton.addEventListener('mouseover', () => {
-        cancelButton.style.backgroundColor = '#cc0000';
-    });
-    cancelButton.addEventListener('mouseout', () => {
-        cancelButton.style.backgroundColor = '#ff4d4d';
-    });
-    addScaleAnimation(cancelButton);
-
-    footer.appendChild(okButton);
-    footer.appendChild(cancelButton);
-
-    // Assemble popup components
-    popupContainer.appendChild(titleBar);
-    popupContainer.appendChild(body);
-    popupContainer.appendChild(footer);
-    popupOverlay.appendChild(popupContainer);
-    commentSection.appendChild(popupOverlay);
-
-    // Trigger popup animation
     setTimeout(() => {
-        popupOverlay.style.opacity = '1';
-        popupContainer.style.transform = 'scale(1)';
+        // Update user display
+        username.textContent = user.username;
+        email.textContent = user.email;
+        initial.textContent = user.initial;
+        initial.style.backgroundColor = user.color;
+
+        // Fade in updated user display
+        username.style.opacity = '1';
+        email.style.opacity = '1';
+        initial.style.opacity = '1';
+    }, 300);
+
+    if (user.username === 'Anonymous') {
+        accessToken = '';
+        localStorage.setItem(tokenLocalStorageKey, '');
+    }
+}
+
+/**
+ * Updates the user object and UI based on the current accessToken.
+ */
+function updateUser() {
+    sendToApi('GET', 'user', accessToken, {})
+        .then(response => {
+            if (response.statusCode === 200) {
+                user = response.jsonResponse;
+                setUserDisplay();
+            }
+        });
+}
+
+/**
+ * Opens the sign-in overlay.
+ */
+function openOverlay() {
+    overlay.style.display = 'flex';
+    setTimeout(() => {
+        overlay.style.opacity = '1';
     }, 10);
+}
+
+/**
+ * Shows the sign-in or sign-out button based on the current accessToken.
+ */
+function showSignInOrOut() {
+    if (accessToken) {
+        // Fade out sign-in button
+        signInButton.style.opacity = '0';
+        setTimeout(() => {
+            signInButton.style.display = 'none';
+            // Fade in sign-out button
+            signOutButton.style.display = 'block';
+            setTimeout(() => {
+                signOutButton.style.opacity = '1';
+            }, 10);
+        }, 300);
+    } else {
+        // Fade out sign-out button
+        signOutButton.style.opacity = '0';
+        setTimeout(() => {
+            signOutButton.style.display = 'none';
+            // Fade in sign-in button
+            signInButton.style.display = 'block';
+            setTimeout(() => {
+                signInButton.style.opacity = '1';
+            }, 10);
+        }, 300);
+    }
+}
+
+/**
+ * Gets the comments for the given page.
+ * @param page - The page number.
+ * @returns {*[]} - The comments.
+ */
+async function getComments(page) {
+    let comments = [];
+
+    const path = 'comment/' + commentLocation + '?comment_per_page=' + commentAmountPerPage + '&page=' + page;
+    await sendToApi('GET', path, accessToken)
+        .then(response => {
+            if (response.statusCode === 200) {
+                comments = JSON.parse(response.jsonResponse.comments
+                    .replace(/'/g, '"')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false')
+                );
+
+            } else {
+                // Show error message
+                console.error(response.jsonResponse.message);
+            }
+        });
+
+    return comments;
+}
+
+/**
+ * Initializes the comment section with the first page of comments.
+ */
+async function initComment() {
+    // Show loading spinner
+    toggleSpinner(commentWindow, true, 'comments-spinner');
+
+    const comments = await getComments(1);
+
+    // Hide loading spinner
+    toggleSpinner(commentWindow, false, 'comments-spinner');
+
+    if (comments && comments.length > 0) {
+        // Hide empty comments message and display load more button
+        if (emptyComment) {
+            emptyComment.style.display = 'none';
+            loadMoreContainer.style.display = 'block';
+        }
+
+        // Add comments to the UI
+        comments.forEach(comment => {
+            addComment(
+                comment.initial,
+                comment.color,
+                comment.username,
+                comment.email,
+                comment.date,
+                comment.time,
+                comment.comment
+            );
+        });
+    }
+}
+
+/**
+ * Connects to the WebSocket for real-time comment updates.
+ */
+function connectWebSocket() {
+    if (ws) {
+        ws.close();
+    }
+
+    const wsUrl = `ws://${apiUrl.split('://')[1]}comment/${commentLocation}`;
+
+    try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = function () {
+            console.log('WebSocket connection established');
+        };
+
+        ws.onmessage = function (event) {
+            const comment = JSON.parse(event.data);
+            // Add new comment at the top with animation
+            addComment(
+                comment.initial,
+                comment.color,
+                comment.username,
+                comment.email,
+                comment.date,
+                comment.time,
+                comment.comment,
+                true
+            );
+
+            // Hide empty comment message if it's showing
+            if (emptyComment && emptyComment.style.display !== 'none') {
+                emptyComment.style.display = 'none';
+                loadMoreContainer.style.display = 'block';
+            }
+        };
+
+        ws.onclose = function () {
+            console.log('WebSocket connection closed');
+            // Attempt to reconnect after 5 seconds
+            setTimeout(connectWebSocket, 5000);
+        };
+
+        ws.onerror = function (error) {
+            console.error('WebSocket error:', error);
+        };
+    } catch (error) {
+        console.error('Failed to create WebSocket:', error);
+        // Attempt to reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000);
+    }
 }
 
 // ===================
 // =    Auth Flow    =
 // ===================
 
-// Sign in click event listener
-const signInButton = document.getElementById('sign-in-button');
-signInButton.addEventListener('click', () => {
+// Init show sign in or out
+showSignInOrOut()
 
-    showPopup('Sign In', signInPopupBody, () => {}, () => {
-        // TODO: sign out
-    });
+// Sign out
+signOutButton.addEventListener('click', () => {
+    // Just clear the accessToken and update the UI
+    localStorage.setItem(tokenLocalStorageKey, '');
+    accessToken = '';
+    updateUser()
+    showSignInOrOut()
 });
 
-// Sign out click event listener
+// Sign in
+// Open sign in specific elements in overlay
+signInButton.addEventListener('click', () => {
+    openOverlay()
 
+    // Hide verification code and new username input
+    verificationContainer.style.display = 'none';
+    newUsernameContainer.style.display = 'none';
 
-// Function to sign in
-function signIn() {}
-function verifyToken() {}
+    emailContainer.style.display = 'flex';
+    setTimeout(() => {
+        emailContainer.style.opacity = '1';
+        emailContainer.style.transform = 'translateY(0)';
+    }, 100);
+});
 
-// Function to sign out, this only needs to remove the token from local storage
+// Send email to API
+sendEmailButton.addEventListener('click', () => {
+    // Reset error message
+    ErrorContainer.style.display = 'none';
+
+    const email = emailInput.value;
+    // Validate email with regex r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    if (!/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(email)) {
+        ErrorContainer.style.display = 'flex';
+        ErrorText.textContent = 'Invalid email address.';
+        return;
+    }
+    verificationEmail = email; // Store email for verification
+
+    // Send email to API
+    sendToApi('POST', 'token', '', {email: email})
+        .then(response => {
+            if (response.statusCode === 200) {
+                // Show verification code input
+                verificationContainer.style.display = 'flex';
+                setTimeout(() => {
+                    verificationContainer.style.opacity = '1';
+                    verificationContainer.style.transform = 'translateY(0)';
+                }, 100);
+
+                // Disable the send button and start the countdown
+                sendEmailButton.disabled = true;
+                sendEmailButton.style.cursor = 'not-allowed';
+                let countdown = 60;
+                sendEmailButton.textContent = `${countdown}s`;
+
+                const countdownInterval = setInterval(() => {
+                    countdown -= 1;
+                    sendEmailButton.textContent = `${countdown}s`;
+
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        sendEmailButton.disabled = false;
+                        sendEmailButton.style.cursor = 'pointer';
+                        sendEmailButton.textContent = 'Send';
+                    }
+                }, 1000);
+            } else {
+                // Show error message
+                ErrorContainer.style.display = 'flex';
+                ErrorText.textContent = response.jsonResponse.message;
+            }
+        });
+})
+
+// Verify email with code
+verifyCodeButton.addEventListener('click', () => {
+    // Reset error message
+    ErrorContainer.style.display = 'none';
+
+    const code = verificationCodeInput.value;
+    if (code.length !== 6) {
+        ErrorContainer.style.display = 'flex';
+        ErrorText.textContent = 'Invalid verification code.';
+        return;
+    }
+
+    // Verify code with API
+    sendToApi('POST', 'verify', '', {email: verificationEmail, verification_code: code})
+        .then(response => {
+            if (response.statusCode === 200) {
+                // Store accessToken and update user
+                accessToken = response.jsonResponse.access_token;
+                localStorage.setItem(tokenLocalStorageKey, accessToken);
+                updateUser();
+                showSignInOrOut()
+
+                // Close overlay
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+            } else {
+                // Show error message
+                ErrorContainer.style.display = 'flex';
+                ErrorText.textContent = response.jsonResponse.message;
+            }
+        });
+});
+
+// Change username
+usernameEditButton.addEventListener('click', () => {
+    openOverlay()
+
+    // Hide email input and verification code
+    emailContainer.style.display = 'none';
+    verificationContainer.style.display = 'none';
+
+    // Show new username input
+    newUsernameContainer.style.display = 'flex';
+    setTimeout(() => {
+        newUsernameContainer.style.opacity = '1';
+        newUsernameContainer.style.transform = 'translateY(0)';
+    }, 100);
+});
+
+changeUsernameButton.addEventListener('click', () => {
+    // Reset error message
+    ErrorContainer.style.display = 'none';
+
+    const newUsername = newUsernameInput.value;
+    if (newUsername.trim() === '') {
+        ErrorContainer.style.display = 'flex';
+        ErrorText.textContent = 'Username cannot be empty.';
+        return;
+    }
+
+    // Send new username to API
+    sendToApi('PUT', 'user?new_username=' + newUsername, accessToken)
+        .then(response => {
+            if (response.statusCode === 200) {
+                // Update user and close overlay
+                user.username = newUsername;
+                setUserDisplay();
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+            } else {
+                // Show error message
+                ErrorContainer.style.display = 'flex';
+                ErrorText.textContent = response.jsonResponse.message;
+            }
+        });
+});
 
 
 // ===================
 // =    Main Flow    =
 // ===================
 
-// get token and location
-// get and store user info
-// get and store comments
-// add comments to the UI
+// update user every startup
+updateUser()
 
+// get and display comments
+initComment()
 
-// TODO: DEBUG REMOVE
-commentButton = document.getElementById('comment-button');
-commentButton.addEventListener('click', () => {
-    const commentTextarea = document.getElementById('comment-textarea');
-    const commentText = commentTextarea.value;
+// watch for new comments with websocket
+connectWebSocket()
+
+// Load more comments
+loadMoreContainer.addEventListener('click', async () => {
+    // Make icon spin continuously while loading
+    loadMoreIcon.style.animation = 'spin 1s linear infinite';
+
+    currentPagination += 1;
+
+    const comments = await getComments(currentPagination);
+
+    // Stop spinning animation when comments are loaded
+    loadMoreIcon.style.animation = '';
+
+    if (comments && comments.length > 0) {
+        comments.forEach(comment => {
+            addComment(
+                comment.initial,
+                comment.color,
+                comment.username,
+                comment.email,
+                comment.date,
+                comment.time,
+                comment.comment
+            );
+        });
+    } else {
+        noMoreComment.style.display = 'block';
+        loadMoreContainer.style.display = 'none';
+    }
+});
+
+// post new comment
+commentButton.addEventListener('click', async () => {
+    let commentText = commentTextarea.value;
     if (commentText.trim() === '') {
         return;
     }
-    addComment('/', '#1d3557', 'Anonymous', 'anonymous user', '1980-01-31', '01:23:45', commentText, true);
-    commentTextarea.value = '';
-    commentTextarea.style.height = 'auto';
-    commentTextarea.style.height = Math.min(commentTextarea.scrollHeight, 200) + 'px';
-});
 
-// Example usage
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', 'This is a comment.');
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', 'This is a comment.');
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', 'This is a comment.');
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', 'This is a comment.');
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', 'This is a comment.');
-addComment('JD', '#ff4d4d', 'John Doe', 'john.doe@example.com', '1980-01-31', '01:23:45', '<script>alert("This is a comment.")<\/script>');
-addComment('/', '#1d3557', 'Anonymous', 'anonymous user', '1980-01-31', '01:23:45', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus pharetra nunc aliquet lacinia dictum. Sed ac felis urna. Cras nec commodo velit, ac luctus nisi. Ut ultricies, elit vitae maximus condimentum, dolor risus pharetra elit, luctus fringilla ante ante eget nulla. Proin eget nibh vitae lacus tincidunt aliquet. Aenean ac rutrum libero. In pellentesque arcu ipsum, nec dapibus magna varius in. Donec in orci in risus aliquet laoreet id eu metus. Morbi nec nisl et justo tempus efficitur. Morbi egestas suscipit ligula, et ultrices ipsum convallis eget.\n\n' +
-    '\n' +
-    'Fusce ac elementum dui, ornare vulputate velit. Mauris blandit quam quis nisi mollis fringilla. Curabitur porttitor enim eget tortor dictum, et laoreet tellus aliquet. Ut metus leo, posuere ac facilisis id, laoreet a ante. Fusce finibus non nibh ac vestibulum. Donec vel ligula massa. Praesent condimentum maximus ipsum, ut commodo justo ultricies a. Vestibulum nec massa bibendum, sagittis dolor ac, iaculis augue. Vivamus vitae scelerisque dolor, ac pellentesque enim. Pellentesque dolor lectus, porttitor id commodo eu, blandit interdum ex. Nam congue faucibus rhoncus. Ut lorem nunc, cursus semper luctus non, bibendum at nunc.\n' +
-    '\n' +
-    'Quisque luctus tellus quis quam egestas, eu fermentum dui ornare. Proin sit amet sapien ac dui aliquam interdum sed eget arcu. Vivamus quis diam euismod, faucibus risus non, commodo turpis. Aenean ornare lacus eget tortor dictum porttitor. Suspendisse euismod vestibulum ipsum, tincidunt congue velit pulvinar nec. Nullam eget ante eros. Cras sit amet nunc nec felis eleifend finibus pretium non neque. Ut pellentesque ut nisi in lacinia. Aenean sed suscipit felis. Etiam pharetra turpis eu nulla eleifend dapibus. Donec eget magna in tortor sollicitudin ultrices. In a vulputate erat. Aliquam ante orci, porta ut arcu ut, porta accumsan lectus. Donec sit amet porttitor risus.');
+    // Escape newlines and trim whitespace
+    commentText = commentTextarea.value.replace('\\', '\\\\')
 
-loadMoreButton = document.getElementById('load-more-container');
-loadMoreButton.addEventListener('click', () => {
-    addComment('/', '#1d3557', 'Anonymous', 'anonymous user', '1980-01-31', '01:23:45', 'This is a comment.');
-    addComment('/', '#1d3557', 'Anonymous', 'anonymous user', '1980-01-31', '01:23:45', 'This is a comment.');
-    addComment('/', '#1d3557', 'Anonymous', 'anonymous user', '1980-01-31', '01:23:45', 'This is a comment.');
+    await sendToApi('POST', 'comment/' + commentLocation, accessToken, {comment: commentText})
+        .then(response => {
+            if (response.statusCode === 201) {
+                commentTextarea.value = '';
+                commentTextarea.dispatchEvent(new Event('input'));
+
+                // Scroll to top
+                commentWindow.scrollTop = 0;
+            } else {
+                // Show error message
+                console.error(response.jsonResponse.message);
+            }
+        });
 });
