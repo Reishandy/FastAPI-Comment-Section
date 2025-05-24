@@ -19,7 +19,7 @@ COPY ./app /code/app
 COPY .env /code/.env
 
 # Command to run the application
-CMD ["/code/venv/bin/uvicorn", "app.main:app", "--host", "192.168.1.99", "--port", "30007"]
+CMD ["/code/venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "30007"]
 
 # docker build -t comment-section-api .
 # docker run -d --name comment-section-api-container --network host --restart always comment-section-api
